@@ -13,7 +13,6 @@ class EAX {
     public:
         Tour crossover(const Tour &parentA, const Tour &parentB);
 
-    private:
         // Represents an edge between 2 cities (e.g., (4, 6))
         struct Edge {
             int from;
@@ -95,4 +94,44 @@ class EAX {
         static std::vector<ABCycle> getABCycles(
             const ABGraph &graph, 
             const TaggedEdges &edges);
+
+        // Selects a subset (E-set) of AB-cycles randomly
+        static std::vector<ABCycle> selectESetRand(
+            const std::vector<EAX::ABCycle> &cycles,
+            std::mt19937 &g,
+            double inclusionProb = 0.5);
+
+        // Minimizes number of conflicting cities in the E-set by iteratively adding/removing cycles
+        static std::vector<int> improveESet(
+            int anchorCycleIdx,
+            const std::vector<int> &initialCycles,
+            const std::vector<int> &sharedCitiesTotal,
+            const std::vector<std::vector<int>> &sharedCitiesBetween,
+            const std::vector<int> &cycleHalfEdgeCount,
+            std::mt19937 &g,
+            int maxConsecutiveNonImprovingIterCount = 20);
+
+        // Measurements of how cycles relate to each other
+        struct ABCycleWeights {
+            // Number of cities cycle "i" shares with other cycles in common (Nagata's fWeight_C)
+            std::vector<int> sharedCitiesTotal;
+
+            // Number of cities cycles "i" and "j" have in common (Nagata's fWeight_RR)
+            std::vector<std::vector<int>> sharedCitiesBetween;
+        };
+
+        // Builds measurements (weights) for each cycle based on their relationships
+        static ABCycleWeights buildABCycleWeights(
+            const std::vector<ABCycle> &cycles,
+            int numCities);
+
+        // Gets half the number of edges for each cycle
+        static std::vector<int> getCycleHalfEdgeCounts(const std::vector<ABCycle> &cycles);
+
+        // Selects a subset (E-set) of AB-cycles to form the E-set for the crossover operation
+        static std::vector<ABCycle> selectESet(
+            const std::vector<ABCycle> &cycles,
+            const ABCycleWeights &weights,
+            std::vector<int> cycleHalfEdgeCount,
+            std::mt19937 &g);
 };
