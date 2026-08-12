@@ -5,12 +5,23 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
+#include <random>
 #include <vector>
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours
 // and returns the resulting offspring
 Tour EAX::crossover(const Tour &parentA, const Tour &parentB) {
 
+    // STEP 1: build temporary AB-graph to produce AB-cycles (used in STEP 2 choose the E-set)
+
+    std::vector<Edge> edgesA = getEdges(parentA);
+    std::vector<Edge> edgesB = getEdges(parentB);
+
+    TaggedEdges taggedEdges = tagEdgesWithParent(edgesA, edgesB);
+
+    ABGraph graph = buildAdjGraph(taggedEdges, parentA.size());
+
+    std::vector<ABCycle> cycles = getABCycles(graph, taggedEdges);
 }
 
 // Hash function for using an Edge in an unordered_set
