@@ -10,35 +10,45 @@
 #include <random>
 #include <vector>
 
+namespace Eax {
+
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours
 // and returns the resulting offspring
-Tour EAX::crossover(const Tour &parentA, const Tour &parentB) {
+Tour crossover(const Tour &parent_a, const Tour &parent_b) {
+
+    using namespace Detail;
 
     // STEP 1: build temporary AB-graph to produce AB-cycles (used in STEP 2 choose the E-set)
 
-    std::vector<Edge> edgesA = getEdges(parentA);
-    std::vector<Edge> edgesB = getEdges(parentB);
+    const std::vector<Edge> edges_a = get_edges(parent_a);
+    const std::vector<Edge> edges_b = get_edges(parent_b);
 
-    TaggedEdges taggedEdges = tagEdgesWithParent(edgesA, edgesB);
+    const TaggedEdges tagged_edges = tag_edges_with_parent(edges_a, edges_b);
 
-    ABGraph graph = buildAdjGraph(taggedEdges, parentA.size());
+    const AbGraph graph = build_ab_graph(tagged_edges, parent_a.size());
 
-    std::vector<ABCycle> cycles = getABCycles(graph, taggedEdges);
+    const std::vector<AbCycle> cycles = get_ab_cycles(graph, tagged_edges);
 
     // STEP 2: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
 
-    ABCycleWeights weights = buildABCycleWeights(cycles, parentA.size());
+    const AbCycleWeights weights = build_ab_cycle_weights(cycles, parent_a.size());
     
-    std::vector<int> cycleHalfEdgeCount = getCycleHalfEdgeCounts(cycles);
+    const std::vector<int> cycle_half_edge_counts = get_cycle_half_edge_counts(cycles);
 
     std::random_device rd;
-    std::mt19937 g(rd());
+    std::mt19937 rng(rd());
 
-    std::vector<EAX::ABCycle> eSet = selectESet(cycles, weights, cycleHalfEdgeCount, g);
+    const std::vector<AbCycle> e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
+
+    // STEP 3: TODO
+
+    return {};
 }
 
+namespace Detail {
+
 // Hash function for using an Edge in an unordered_set
-std::size_t EAX::EdgeHash::operator()(const EAX::EdgeKey &key) const noexcept {
+std::size_t EdgeHash::operator()(const EdgeKey &key) const noexcept {
     std::size_t h1 = std::hash<int>{}(key.first);
     std::size_t h2 = std::hash<int>{}(key.second);
 
@@ -47,16 +57,16 @@ std::size_t EAX::EdgeHash::operator()(const EAX::EdgeKey &key) const noexcept {
 
 // Extracts all edges from a tour, including the closing edge 
 // from the last city to the first using modulo the tour length
-// e.g., {1, 4, 2, 3} to {(1,4), (4,2), (2,3), (3,1)}
-std::vector<EAX::Edge> EAX::getEdges(const Tour &tour) {
+// e.g., { 1, 4, 2, 3 } to { (1, 4), (4, 2), (2, 3), (3, 1) }
+std::vector<Edge> get_edges(const Tour &tour) {
 
-    std::vector<EAX::Edge> edges;
+    std::vector<Edge> edges;
     edges.reserve(tour.size());
 
-    for (int fromIdx = 0, N = static_cast<int>(tour.size()); fromIdx < N; fromIdx++) {
-        int toIdx = (fromIdx + 1) % N;
+    for (std::size_t from_idx = 0, N = tour.size(); from_idx < N; from_idx++) {
+        std::size_t to_idx = (from_idx + 1) % N;
 
-        edges.push_back({tour[fromIdx], tour[toIdx]});
+        edges.push_back({tour[from_idx], tour[to_idx]});
     }
 
     return edges;
@@ -64,7 +74,7 @@ std::vector<EAX::Edge> EAX::getEdges(const Tour &tour) {
 
 // Return a canonical representation of an edge
 // so that (t, z) and (z, t) are treated as identical
-EAX::EdgeKey EAX::normalizeEdge(const EAX::Edge &edge) {
+EdgeKey normalize_edge(const Edge &edge) {
     return {
         std::min(edge.from, edge.to),
         std::max(edge.from, edge.to)
@@ -72,8 +82,8 @@ EAX::EdgeKey EAX::normalizeEdge(const EAX::Edge &edge) {
 }
 
 // Hash function for using a TaggedEdge in an unordered_set
-std::size_t EAX::TaggedEdgeHash::operator()(const TaggedEdge &te) const noexcept {
-    const std::size_t h1 = EAX::EdgeHash{}(EAX::normalizeEdge(te.edge));
+std::size_t TaggedEdgeHash::operator()(const TaggedEdge &te) const noexcept {
+    const std::size_t h1 = EdgeHash{}(normalize_edge(te.edge));
     const std::size_t h2 = std::hash<int>{}(static_cast<int>(te.parent));
 
     return h1 ^ (h2 << 1);
@@ -82,62 +92,63 @@ std::size_t EAX::TaggedEdgeHash::operator()(const TaggedEdge &te) const noexcept
 // Equality function for using a TaggedEdge in an unordered_set
 // 2 TaggedEdges are considered equal if:
 // connect the same cities + come from the same parent
-bool EAX::TaggedEdgeEqual::operator()(const TaggedEdge &lhs,
-                                      const TaggedEdge &rhs) const noexcept {
-    return normalizeEdge(lhs.edge) == normalizeEdge(rhs.edge)
-           && lhs.parent == rhs.parent;
+bool TaggedEdgeEqual::operator()(
+    const TaggedEdge &lhs,
+    const TaggedEdge &rhs) const noexcept {
+    return normalize_edge(lhs.edge) == normalize_edge(rhs.edge)
+        && lhs.parent == rhs.parent;
 }
 
 // Returns whether an edge exists in an edge-set using an
 // average O(1) hash-table lookup
-bool EAX::containsEdge(const EAX::EdgeSet &edgeSet, const EAX::Edge &edge) {
-    return edgeSet.contains(EAX::normalizeEdge(edge));
+bool contains_edge(const EdgeSet &edge_set, const Edge &edge) {
+    return edge_set.contains(normalize_edge(edge));
 }
 
 // Builds a hash set of edges for fast memory lookups
-EAX::EdgeSet EAX::buildEdgeSet(const std::vector<EAX::Edge> &edges) {
-    EAX::EdgeSet edgeSet;
+EdgeSet build_edge_set(const std::vector<Edge> &edges) {
+    EdgeSet edge_set;
 
-    for (const EAX::Edge &edge : edges) {
-        edgeSet.insert(EAX::normalizeEdge(edge));
+    for (const Edge &edge : edges) {
+        edge_set.insert(normalize_edge(edge));
     }
 
-    return edgeSet;
+    return edge_set;
 }
 
-// Return edges appear in "src" that do not appear in "other"
-std::vector<EAX::Edge> EAX::getUniqueEdges(
-    const std::vector<EAX::Edge> &src,
-    const std::vector<EAX::Edge> &other) {
+// Return edges appear in "src" which do not appear in "other"
+std::vector<Edge> get_unique_edges(
+    const std::vector<Edge> &src,
+    const std::vector<Edge> &other) {
 
-        EAX::EdgeSet otherSet = EAX::buildEdgeSet(other);
+        EdgeSet other_set = build_edge_set(other);
 
-        std::vector<EAX::Edge> uniqueEdges;
-        uniqueEdges.reserve(src.size());
+        std::vector<Edge> unique_edges;
+        unique_edges.reserve(src.size());
 
-        for (const EAX::Edge &edge : src) {
-            if (!containsEdge(otherSet, edge)) {
-                uniqueEdges.push_back(edge);
+        for (const Edge &edge : src) {
+            if (!contains_edge(other_set, edge)) {
+                unique_edges.push_back(edge);
             }
         }
 
-        return uniqueEdges;
+        return unique_edges;
     }
 
 // Lables each edge with the parent (A or B) it originated from
-EAX::TaggedEdges EAX::tagEdgesWithParent(
-    const std::vector<EAX::Edge> &edgesA,
-    const std::vector<EAX::Edge> &edgesB) {
+TaggedEdges tag_edges_with_parent(
+    const std::vector<Edge> &edges_a,
+    const std::vector<Edge> &edges_b) {
 
-        EAX::TaggedEdges edges;
-        edges.reserve(edgesA.size() + edgesB.size());
+        TaggedEdges edges;
+        edges.reserve(edges_a.size() + edges_b.size());
 
-        for (const EAX::Edge &edge : edgesA) {
-            edges.push_back({edge, EAX::Parent::A});
+        for (const Edge &edge : edges_a) {
+            edges.push_back({edge, Parent::A});
         }
 
-        for (const EAX::Edge &edge : edgesB) {
-            edges.push_back({edge, EAX::Parent::B});
+        for (const Edge &edge : edges_b) {
+            edges.push_back({edge, Parent::B});
         }
 
         return edges;
@@ -145,21 +156,18 @@ EAX::TaggedEdges EAX::tagEdgesWithParent(
 
 // Builds the AB adjacency graph used to search for AB-cycles
 // Contains just A-only edges or B-only edges, does not contain A and B shared edges
-/*
-Example AB adjacency graph:
+// Example AB adjacency graph:
 
-graph[0] =
-{
-    {{0,1}, Parent::A},
-    {{1,4}, Parent::B}
-};
-*/
-EAX::ABGraph EAX::buildAdjGraph(
-    const std::vector<EAX::TaggedEdge> &edges,
-    int numCities) {
-        EAX::ABGraph graph(numCities);
+// graph[0] = {
+//     { {0, 1}, Parent::A },
+//     { {1, 4}, Parent::B }
+// };
+AbGraph build_ab_graph(
+    const std::vector<TaggedEdge> &edges,
+    std::size_t num_cities) {
+        AbGraph graph(num_cities);
 
-        for (const EAX::TaggedEdge &edge : edges) {
+        for (const TaggedEdge &edge : edges) {
             // Store each edge for both edgepoints
             // so the graph can be traversed from either city
             graph[edge.edge.from].push_back(edge);
@@ -170,223 +178,225 @@ EAX::ABGraph EAX::buildAdjGraph(
     }
 
 // Given endpoint of an edge, returns other endpoint
-int EAX::getOtherEndpoint(const EAX::TaggedEdge &te, int currCity) {
-    return (te.edge.from == currCity)
-           ? te.edge.to
-           : te.edge.from;
+int get_other_endpoint(const TaggedEdge &te, int curr_city) {
+    return (te.edge.from == curr_city)
+        ? te.edge.to
+        : te.edge.from;
 }
 
 // Builds the initial collection of unused edges,
 // each edge being tracked once rather than once per endpoint:
 // (if edge (t, z) exists, there's no need for edge (z, t))
-EAX::TaggedEdgeSet EAX::buildUnusedEdgesSet(const std::vector<EAX::TaggedEdge> &edges) {
-    EAX::TaggedEdgeSet unusedEdges;
-    unusedEdges.reserve(edges.size());
+TaggedEdgeSet build_unused_edges_set(const std::vector<TaggedEdge> &edges) {
+    TaggedEdgeSet unused_edges;
+    unused_edges.reserve(edges.size());
 
-    for (const EAX::TaggedEdge &edge : edges) {
-        unusedEdges.insert(edge);
+    for (const TaggedEdge &edge : edges) {
+        unused_edges.insert(edge);
     }
 
-    return unusedEdges;
+    return unused_edges;
 }
 
 // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
 // path between A/B edges from an arbitrary edge until returning to the starting
 // city
-std::vector<EAX::ABCycle> EAX::getABCycles(
-    const EAX::ABGraph &graph,
-    const EAX::TaggedEdges &edges) {
+std::vector<AbCycle> get_ab_cycles(
+    const AbGraph &graph,
+    const TaggedEdges &edges) {
 
-    std::vector<EAX::ABCycle> cycles;
+    std::vector<AbCycle> cycles;
 
-    TaggedEdgeSet unusedEdges = EAX::buildUnusedEdgesSet(edges);
+    TaggedEdgeSet unused_edges = build_unused_edges_set(edges);
 
-    while (!unusedEdges.empty()) {
-        auto it = unusedEdges.begin();
-        EAX::TaggedEdge startEdge = *it;
+    while (!unused_edges.empty()) {
+        auto it = unused_edges.begin();
+        TaggedEdge start_edge = *it;
         
-        int startCity = startEdge.edge.from;
+        int start_city = start_edge.edge.from;
 
-        EAX::ABCycle currCycle;
+        AbCycle curr_cycle;
 
-        EAX::TaggedEdge currEdge = startEdge;
-        int currCity = currEdge.edge.from;
+        TaggedEdge curr_edge = start_edge;
+        int curr_city = curr_edge.edge.from;
 
         while (true) {
-            currCycle.push_back(currEdge);
-            unusedEdges.erase(currEdge);
+            curr_cycle.push_back(curr_edge);
+            unused_edges.erase(curr_edge);
             
-            currCity = EAX::getOtherEndpoint(currEdge, currCity);
-            if (currCity == startCity) {
+            curr_city = get_other_endpoint(curr_edge, curr_city);
+            if (curr_city == start_city) {
                 break;
             }
 
-            Parent expectedParent = (currEdge.parent == Parent::A)
-                                    ? Parent::B
-                                    : Parent::A;
+            Parent expected_parent = (curr_edge.parent == Parent::A)
+                ? Parent::B
+                : Parent::A;
 
             // Track whether an adequate (unused of expected parent from currCity) edge was found
-            bool foundNext = false;
-            for (const EAX::TaggedEdge &edge : graph[currCity]) {
-                if (edge.parent != expectedParent || !unusedEdges.contains(edge)) {
+            bool found_next = false;
+            for (const TaggedEdge &edge : graph[curr_city]) {
+                if (edge.parent != expected_parent || !unused_edges.contains(edge)) {
                     continue;
                 }
 
-                currEdge = edge;
-                foundNext = true;
+                curr_edge = edge;
+                found_next = true;
                 break;
             }
 
-            assert(foundNext && "AB-cycle failed to close: dead end before returning to start city");
+            assert(found_next && "AB-cycle failed to close: dead end before returning to start city");
         }
 
-        cycles.push_back(currCycle);
+        cycles.push_back(curr_cycle);
     }
     
     return cycles;
 }
 
 // Selects a subset (E-set) of AB-cycles randomly
-std::vector<EAX::ABCycle> EAX::selectESetRand(
-    const std::vector<EAX::ABCycle> &cycles,
-    std::mt19937 &g,
-    double inclusionProb) {
+std::vector<AbCycle> select_e_set_rand(
+    const std::vector<AbCycle> &cycles,
+    std::mt19937 &rng,
+    double inclusion_prob) {
         
-     std::uniform_real_distribution<double> distribution(0.0, 1.0);
+    std::uniform_real_distribution<double> distrib(0.0, 1.0);
 
-     std::vector<EAX::ABCycle> eSet;
+    std::vector<AbCycle> e_set;
 
-     for (const ABCycle &cycle : cycles) {
-        if (distribution(g) < inclusionProb) {
-            eSet.push_back(cycle);
+    for (const AbCycle &cycle : cycles) {
+        if (distrib(rng) < inclusion_prob) {
+            e_set.push_back(cycle);
         }
-     }
+    }
 
-     return eSet;
+    return e_set;
 }
 
 // Builds measurements (weights) for each cycle based on their relationships
-EAX::ABCycleWeights EAX::buildABCycleWeights(
-    const std::vector<EAX::ABCycle> &cycles,
-    int numCities) {
+AbCycleWeights build_ab_cycle_weights(
+    const std::vector<AbCycle> &cycles,
+    std::size_t num_cities) {
     
-    EAX::ABCycleWeights weights;
+    AbCycleWeights weights;
 
-    int numCycles = static_cast<int>(cycles.size());
+    std::size_t num_cycles = cycles.size();
 
-    weights.sharedCitiesTotal.assign(numCycles, 0);
-    weights.sharedCitiesBetween.assign(numCycles, std::vector<int>(numCycles, 0));
+    weights.shared_cities_total.assign(num_cycles, 0);
+    weights.shared_cities_between.assign(num_cycles, std::vector<int>(num_cycles, 0));
 
-    std::vector<std::array<int, 2>> owningCycle(numCities, {-1, -1});
+    std::vector<std::array<int, 2>> owning_cycle(num_cities, {-1, -1});
 
-    for (int cycleIdx = 0; cycleIdx < numCycles; cycleIdx++) {
-        for (const EAX::TaggedEdge &te : cycles[cycleIdx]) {
+    for (int i = 0; i < num_cycles; i++) {
+        for (const TaggedEdge &te : cycles[i]) {
 
             if (te.parent != Parent::A) {
                 continue;
             }
 
             for (int city : {te.edge.from, te.edge.to}) {
-                if (owningCycle[city][0] == -1) {
-                    owningCycle[city][0] = cycleIdx;
+                if (owning_cycle[city][0] == -1) {
+                    owning_cycle[city][0] = i;
                 }
 
-                else if (owningCycle[city][1] == -1) {
-                    owningCycle[city][1] = cycleIdx;
+                else if (owning_cycle[city][1] == -1) {
+                    owning_cycle[city][1] = i;
                 }
             }
         }
     }
 
-    for (int city = 0; city < numCities; city++) {
-        int cycleA = owningCycle[city][0];
-        int cycleB = owningCycle[city][1];
+    for (int city = 0; city < num_cities; city++) {
+        int cycle_a = owning_cycle[city][0];
+        int cycle_b = owning_cycle[city][1];
         
-        if (cycleA == -1 || cycleB == -1 || cycleA == cycleB) {
+        if (cycle_a == -1 || cycle_b == -1 || cycle_a == cycle_b) {
             continue;
         }
 
-        weights.sharedCitiesTotal[cycleA]++;
-        weights.sharedCitiesTotal[cycleB]++;
+        weights.shared_cities_total[cycle_a]++;
+        weights.shared_cities_total[cycle_b]++;
 
-        weights.sharedCitiesBetween[cycleA][cycleB]++;
-        weights.sharedCitiesBetween[cycleB][cycleA]++;
+        weights.shared_cities_between[cycle_a][cycle_b]++;
+        weights.shared_cities_between[cycle_b][cycle_a]++;
     }
 
     return weights;
 }
 
-// Minimizes number of conflicting cities in the E-set by iteratively adding/removing cycles
-std::vector<int> EAX::improveESet(
-    int anchorCycleIdx,
-    const std::vector<int> &initialCycles,
-    const std::vector<int> &sharedCitiesTotal,
-    const std::vector<std::vector<int>> &sharedCitiesBetween,
-    const std::vector<int> &cycleHalfEdgeCount,
-    std::mt19937 &g,
-    const int maxConsecutiveNonImprovingIterCount = 20
+// Minimizes number of conflicting cities in the E-set
+// by iteratively adding/removing cycles
+std::vector<int> improve_e_set(
+    int anchor_cycle_idx,
+    const std::vector<int> &initial_cycles,
+    const std::vector<int> &shared_cities_total,
+    const std::vector<std::vector<int>> &shared_cities_between,
+    const std::vector<int> &cycle_half_edge_count,
+    std::mt19937 &rng,
+    const int max_consecutive_non_improving_iter_count
 ) {
 
-    const int cycleCount = static_cast<int>(sharedCitiesTotal.size());
+    const std::size_t num_cycles = shared_cities_total.size();
 
     // isUsed[i]: whether cycle "i" is currently in the E-set
-    std::vector<bool> isUsed(cycleCount, false);
+    std::vector<bool> is_used(num_cycles, false);
 
-    int conflictingCitiesCount = 0;
+    int conflicting_cities_count = 0;
 
     // For cycle "i": total number of boundary-cities shared with 
     // every currently-selected/used cycle in the E-set summed together
-    // sharedCitiesWithSelected[i] = sum over each selected (used in the E-set) cycle "s" of sharedCitiesBetween[i][s]
-    std::vector<int> sharedCitiesWithSelected(cycleCount, 0);
+    // shared_cities_with_selected[i] =
+    // sum over each selected (used in the E-set) cycle "s" of shared_cities_between[i][s]
+    std::vector<int> shared_cities_with_selected(num_cycles, 0);
 
-    // Adds cycle "addedIdx" to the E-set and updates its dependent states, "removeCycle" exact inverse
-    auto addCycle = [&](int addedIdx) {
-        isUsed[addedIdx] = true;
+    // Adds cycle "addedIdx" to the E-set and updates its dependent states, "remove_cycle" exact inverse
+    auto add_cycle = [&](int added_idx) {
+        is_used[added_idx] = true;
 
-        conflictingCitiesCount += sharedCitiesTotal[addedIdx] - 2*sharedCitiesWithSelected[addedIdx];
+        conflicting_cities_count += shared_cities_total[added_idx] - 2*shared_cities_with_selected[added_idx];
 
-        for (int i = 0; i < cycleCount; i++) {
-            sharedCitiesWithSelected[i] += sharedCitiesBetween[i][addedIdx];
+        for (int i = 0; i < num_cycles; i++) {
+            shared_cities_with_selected[i] += shared_cities_between[i][added_idx];
         }
     };
 
-    // Removes cycle "removedIdx" from the E-set and updates its dependent states, "addCycle" exact inverse
-    auto removeCycle = [&](int removedIdx) {
-        isUsed[removedIdx] = false;
+    // Removes cycle "removedIdx" from the E-set and updates its dependent states, "add_cycle" exact inverse
+    auto remove_cycle = [&](int removed_idx) {
+        is_used[removed_idx] = false;
 
-        conflictingCitiesCount -= sharedCitiesTotal[removedIdx] - 2*sharedCitiesWithSelected[removedIdx];
+        conflicting_cities_count -= shared_cities_total[removed_idx] - 2*shared_cities_with_selected[removed_idx];
 
-        for (int i = 0; i < cycleCount; i++) {
-            sharedCitiesWithSelected[i] -= sharedCitiesBetween[i][removedIdx];
+        for (int i = 0; i < num_cycles; i++) {
+            shared_cities_with_selected[i] -= shared_cities_between[i][removed_idx];
         }
     };
 
     // Build later-improved, initial E-set
-    for (int idx : initialCycles) {
-        addCycle(idx);
+    for (int idx : initial_cycles) {
+        add_cycle(idx);
     }
 
-    std::vector<bool> bestIsUsed = isUsed;
-    int consecutiveNonImprovingIterCount = 0;
-    int bestConflictingCitiesCount = conflictingCitiesCount;
+    std::vector<bool> best_is_used = is_used;
+    int consecutive_non_improving_iter_count = 0;
+    int best_conflicting_cities_count = conflicting_cities_count;  // The lower - the better
 
-    while (consecutiveNonImprovingIterCount < maxConsecutiveNonImprovingIterCount) {
+    while (consecutive_non_improving_iter_count < max_consecutive_non_improving_iter_count) {
 
         // Valid cycle with smallest "delta"
-        int bestCandIdx = -1;
+        int best_cand_idx = -1;
 
-        int bestDelta = std::numeric_limits<int>::max();
+        int best_delta = std::numeric_limits<int>::max();
 
-        auto considerCand = [&](int idx, int delta) {
-            if (delta < bestDelta) {
-                bestDelta = delta;
-                bestCandIdx = idx;
+        auto consider_cand = [&](int idx, int delta) {
+            if (delta < best_delta) {
+                best_delta = delta;
+                best_cand_idx = idx;
             }
         };
 
-        for (int i = 0; i < cycleCount; i++) {
+        for (int i = 0; i < num_cycles; i++) {
 
-            if (i == anchorCycleIdx) {
+            if (i == anchor_cycle_idx) {
                 continue;
             }
 
@@ -394,14 +404,14 @@ std::vector<int> EAX::improveESet(
             // (added if currently unselected, removed if currently selected)
             int delta;
             
-            if (!isUsed[i] && sharedCitiesWithSelected[i] > 0) {
-                delta = sharedCitiesTotal[i] - 2*sharedCitiesWithSelected[i];
-                considerCand(i, delta);
+            if (!is_used[i] && shared_cities_with_selected[i] > 0) {
+                delta = shared_cities_total[i] - 2*shared_cities_with_selected[i];
+                consider_cand(i, delta);
             }
 
-            else if (isUsed[i]) {
-                delta = -(sharedCitiesTotal[i] - 2*sharedCitiesWithSelected[i]);
-                considerCand(i, delta);
+            else if (is_used[i]) {
+                delta = -(shared_cities_total[i] - 2*shared_cities_with_selected[i]);
+                consider_cand(i, delta);
             }
 
             // Not a valid candidate
@@ -411,98 +421,105 @@ std::vector<int> EAX::improveESet(
         }
 
         // Apply move which scan found best
-        if (bestCandIdx != -1) {  // No valid candidate found, no move to apply - only anchor cycle is left in the E-set
-            if (isUsed[bestCandIdx]) {
-                removeCycle(bestCandIdx);
+        // No valid candidate found, no move to apply - only anchor cycle is left in the E-set
+        if (best_cand_idx != -1) {
+            if (is_used[best_cand_idx]) {
+                remove_cycle(best_cand_idx);
             }
             
             else {
-                addCycle(bestCandIdx);
+                add_cycle(best_cand_idx);
             }
         }
 
         // Check if iteration set new record for lowest (best) conflictingCitiesCount
-        if (conflictingCitiesCount < bestConflictingCitiesCount) {
-            consecutiveNonImprovingIterCount = 0;
-            bestConflictingCitiesCount = conflictingCitiesCount;
-            bestIsUsed = isUsed;
+        if (conflicting_cities_count < best_conflicting_cities_count) {
+            consecutive_non_improving_iter_count = 0;
+            best_conflicting_cities_count = conflicting_cities_count;
+            best_is_used = is_used;
         }
 
         else {
-            consecutiveNonImprovingIterCount++;
+            consecutive_non_improving_iter_count++;
         }
     }
 
     // Convert used-cycle boolean array to best-cycle-index array to return
-    std::vector<int> bestIndices;
-    for (int i = 0; i < cycleCount; i++) {
-        if (bestIsUsed[i]) {
-            bestIndices.push_back(i);
+    std::vector<int> best_indices;
+    for (int i = 0; i < num_cycles; i++) {
+        if (best_is_used[i]) {
+            best_indices.push_back(i);
         }
     }
 
-    return bestIndices;
+    return best_indices;
 }
 
 // Gets the half the number of edges for each cycle
-std::vector<int> EAX::getCycleHalfEdgeCounts(const std::vector<EAX::ABCycle> &cycles) {
-    std::vector<int> cycleHalfEdgeCount;
-    cycleHalfEdgeCount.reserve(cycles.size());
+std::vector<int> get_cycle_half_edge_counts(const std::vector<AbCycle> &cycles) {
+    std::vector<int> cycle_half_edge_counts;
+    cycle_half_edge_counts.reserve(cycles.size());
 
-    for (const EAX::ABCycle &cycle : cycles) {
-        cycleHalfEdgeCount.push_back(static_cast<int>(cycle.size()) / 2);
+    for (const AbCycle &cycle : cycles) {
+        cycle_half_edge_counts.push_back(static_cast<int>(cycle.size()) / 2);
     }
 
-    return cycleHalfEdgeCount;
+    return cycle_half_edge_counts;
 }
 
 // Selects a subset (E-set) of AB-cycles to form the E-set for the crossover operation
 // Starts from a random anchor cycle and adds cycles build around it to build an initial E-set,
 // then improves it by iteratively adding/removing cycles
-// to minimize the number of conflicting cities in the E-set ("improveESet" function)
-std::vector<EAX::ABCycle> EAX::selectESet(
-    const std::vector<EAX::ABCycle> &cycles,
-    const EAX::ABCycleWeights &weights,
-    std::vector<int> cycleHalfEdgeCount,
-    std::mt19937 &g
+// to minimize the number of conflicting cities in the E-set ("improve_e_set" function)
+std::vector<AbCycle> select_e_set(
+    const std::vector<AbCycle> &cycles,
+    const AbCycleWeights &weights,
+    const std::vector<int> cycle_half_edge_counts,
+    std::mt19937 &rng
 ) {
 
     if (cycles.empty()) {
         return {};
     }
 
-    std::uniform_int_distribution<int> distribution(0, static_cast<int>(cycles.size() - 1));
-    int anchorCycleIdx = distribution(g);
+    std::uniform_int_distribution<int> distrib(0, static_cast<int>(cycles.size() - 1));
+    int anchor_cycle_idx = distrib(rng);
 
-    std::vector<int> initialCycles = {anchorCycleIdx};
+    std::vector<int> initial_cycles = {anchor_cycle_idx};
 
-    std::uniform_int_distribution<int> coinFlip(0, 1);
+    std::uniform_int_distribution<int> coin_flip(0, 1);
 
-    for (int i = 0; i < static_cast<int>(cycles.size()); i++) {
+    for (std::size_t i = 0, N = cycles.size(); i < N; i++) {
 
         // Skip already added anchor cycle
-        if (anchorCycleIdx == i) {
+        if (anchor_cycle_idx == i) {
             continue;
         }
 
-        bool sharesCityWithAnchor = weights.sharedCitiesBetween[anchorCycleIdx][i] > 0;  // "Touches" anchor cycle
-        bool isSmallerThanAnchor = cycleHalfEdgeCount[anchorCycleIdx] > cycleHalfEdgeCount[i];
+        bool shares_city_with_anchor =
+            weights.shared_cities_between[anchor_cycle_idx][i] > 0;  // "Touches" anchor cycle
+        bool is_smaller_than_anchor =
+            cycle_half_edge_counts[anchor_cycle_idx] > cycle_half_edge_counts[i];
 
-        if (sharesCityWithAnchor && isSmallerThanAnchor
-            && coinFlip(g) == 0) {
-            initialCycles.push_back(i);
+        if (shares_city_with_anchor && is_smaller_than_anchor
+            && coin_flip(rng) == 0) {
+            initial_cycles.push_back(i);
         }
     }
 
-    std::vector<int> bestIndices = EAX::improveESet(
-        anchorCycleIdx, initialCycles,
-        weights.sharedCitiesTotal, weights.sharedCitiesBetween,
-        cycleHalfEdgeCount, g);
+    std::vector<int> best_indices = improve_e_set(
+        anchor_cycle_idx, initial_cycles,
+        weights.shared_cities_total, weights.shared_cities_between,
+        cycle_half_edge_counts, rng);
 
-    std::vector<EAX::ABCycle> eSet;
-    for (int idx : bestIndices) {
-        eSet.push_back(cycles[idx]);
+    std::vector<AbCycle> e_set;
+    for (int idx : best_indices) {
+        e_set.push_back(cycles[idx]);
     }
 
-    return eSet;
+    return e_set;
+}
+
+}
+
 }
