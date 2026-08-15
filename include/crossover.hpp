@@ -65,6 +65,8 @@ namespace Eax {
         using TaggedEdges = std::vector<TaggedEdge>;
         using AbGraph = std::vector<std::vector<TaggedEdge>>;
         using AbCycle = std::vector<TaggedEdge>;
+        using AbCycles = std::vector<AbCycle>;  // Full set of AB-cycles from the AB-graph
+        using ESet = std::vector<AbCycle>;  // Selected subset forming the E-set
 
         // Extracts all edges from a tour
         std::vector<Edge> get_edges(const Tour &tour);
@@ -82,21 +84,21 @@ namespace Eax {
         // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
         // path between A/B edges from an arbitrary edge until returning to the starting
         // city
-        std::vector<AbCycle> get_ab_cycles(
+        AbCycles get_ab_cycles(
             const AbGraph &graph,
             const TaggedEdges &edges);
 
         // Builds measurements (weights) for each cycle based on their relationships
         AbCycleWeights build_ab_cycle_weights(
-            const std::vector<AbCycle> &cycles,
+            const AbCycles &cycles,
             std::size_t num_cities);
 
         // Gets half the number of edges for each cycle
-        std::vector<int> get_cycle_half_edge_counts(const std::vector<AbCycle> &cycles);
+        std::vector<int> get_cycle_half_edge_counts(const AbCycles &cycles);
 
         // Selects a subset (E-set) of AB-cycles to form the E-set for the crossover operation
-        std::vector<AbCycle> select_e_set(
-            const std::vector<AbCycle> &cycles,
+        ESet select_e_set(
+            const AbCycles &cycles,
             const AbCycleWeights &weights,
             const std::vector<int> &cycle_half_edge_counts,
             std::mt19937 &rng);
@@ -134,8 +136,8 @@ namespace Eax {
         TaggedEdgeSet build_unused_edges_set(const std::vector<TaggedEdge> &edges);
 
         // Selects a subset (E-set) of AB-cycles randomly
-        std::vector<AbCycle> select_e_set_rand(
-            const std::vector<AbCycle> &cycles,
+        ESet select_e_set_rand(
+            const AbCycles &cycles,
             std::mt19937 &rng,
             double inclusion_prob = 0.5);
     }

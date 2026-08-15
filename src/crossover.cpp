@@ -27,7 +27,7 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     const AbGraph graph = build_ab_graph(tagged_edges, parent_a.size());
 
-    const std::vector<AbCycle> cycles = get_ab_cycles(graph, tagged_edges);
+    const AbCycles cycles = get_ab_cycles(graph, tagged_edges);
 
     // STEP 2: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
 
@@ -38,7 +38,7 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
     std::random_device rd;
     std::mt19937 rng(rd());
 
-    const std::vector<AbCycle> e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
+    const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
 
     // STEP 3: TODO
 
@@ -201,11 +201,11 @@ TaggedEdgeSet build_unused_edges_set(const std::vector<TaggedEdge> &edges) {
 // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
 // path between A/B edges from an arbitrary edge until returning to the starting
 // city
-std::vector<AbCycle> get_ab_cycles(
+AbCycles get_ab_cycles(
     const AbGraph &graph,
     const TaggedEdges &edges) {
 
-    std::vector<AbCycle> cycles;
+    AbCycles cycles;
 
     TaggedEdgeSet unused_edges = build_unused_edges_set(edges);
 
@@ -255,14 +255,14 @@ std::vector<AbCycle> get_ab_cycles(
 }
 
 // Selects a subset (E-set) of AB-cycles randomly
-std::vector<AbCycle> select_e_set_rand(
-    const std::vector<AbCycle> &cycles,
+ESet select_e_set_rand(
+    const AbCycles &cycles,
     std::mt19937 &rng,
     double inclusion_prob) {
         
     std::uniform_real_distribution<double> distrib(0.0, 1.0);
 
-    std::vector<AbCycle> e_set;
+    ESet e_set;
 
     for (const AbCycle &cycle : cycles) {
         if (distrib(rng) < inclusion_prob) {
@@ -275,7 +275,7 @@ std::vector<AbCycle> select_e_set_rand(
 
 // Builds measurements (weights) for each cycle based on their relationships
 AbCycleWeights build_ab_cycle_weights(
-    const std::vector<AbCycle> &cycles,
+    const AbCycles &cycles,
     std::size_t num_cities) {
     
     AbCycleWeights weights;
@@ -456,7 +456,7 @@ std::vector<int> improve_e_set(
 }
 
 // Gets the half the number of edges for each cycle
-std::vector<int> get_cycle_half_edge_counts(const std::vector<AbCycle> &cycles) {
+std::vector<int> get_cycle_half_edge_counts(const AbCycles &cycles) {
     std::vector<int> cycle_half_edge_counts;
     cycle_half_edge_counts.reserve(cycles.size());
 
@@ -471,8 +471,8 @@ std::vector<int> get_cycle_half_edge_counts(const std::vector<AbCycle> &cycles) 
 // Starts from a random anchor cycle and adds cycles build around it to build an initial E-set,
 // then improves it by iteratively adding/removing cycles
 // to minimize the number of conflicting cities in the E-set ("improve_e_set" function)
-std::vector<AbCycle> select_e_set(
-    const std::vector<AbCycle> &cycles,
+ESet select_e_set(
+    const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> cycle_half_edge_counts,
     std::mt19937 &rng
@@ -512,7 +512,7 @@ std::vector<AbCycle> select_e_set(
         weights.shared_cities_total, weights.shared_cities_between,
         cycle_half_edge_counts, rng);
 
-    std::vector<AbCycle> e_set;
+    ESet e_set;
     for (int idx : best_indices) {
         e_set.push_back(cycles[idx]);
     }
