@@ -62,6 +62,7 @@ namespace Eax {
 
         using EdgeSet = std::unordered_set<EdgeKey, EdgeHash>;
         using TaggedEdgeSet = std::unordered_set<TaggedEdge, TaggedEdgeHash, TaggedEdgeEqual>;
+        using Edges = std::vector<Edge>;
         using TaggedEdges = std::vector<TaggedEdge>;
         using AbGraph = std::vector<std::vector<TaggedEdge>>;
         using AbCycle = std::vector<TaggedEdge>;
@@ -69,16 +70,16 @@ namespace Eax {
         using ESet = std::vector<AbCycle>;  // Selected subset forming the E-set
 
         // Extracts all edges from a tour
-        std::vector<Edge> get_edges(const Tour &tour);
+        Edges get_edges(const Tour &tour);
 
         // Returns the edges unique to the source collection
         TaggedEdges tag_edges_with_parent(
-            const std::vector<Edge> &edges_a,
-            const std::vector<Edge> &edges_b);
+            const Edges &edges_a,
+            const Edges &edges_b);
         
         // Tags each edge with its originating parent
         AbGraph build_ab_graph(
-            const std::vector<TaggedEdge> &edges,
+            const TaggedEdges &edges,
             std::size_t num_cities);
 
         // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
@@ -121,19 +122,19 @@ namespace Eax {
         bool contains_edge(const EdgeSet &edge_set, const Edge &edge);
 
         // Builds a hash set for fast edge lookups
-        EdgeSet build_edge_set(const std::vector<Edge> &edges);
+        EdgeSet build_edge_set(const Edges &edges);
 
         // Returns the edges unique to the source collection.
-        std::vector<Edge> get_unique_edges(
-            const std::vector<Edge> &src,
-            const std::vector<Edge> &other);
+        Edges get_unique_edges(
+            const Edges &src,
+            const Edges &other);
 
         // Given endpoint of an edge, returns other endpoint
         int get_other_endpoint(const TaggedEdge &te, int curr_city);
 
         // Builds the initial collection of unused edges,
         // each edge being tracked once rather than once per each endpoint
-        TaggedEdgeSet build_unused_edges_set(const std::vector<TaggedEdge> &edges);
+        TaggedEdgeSet build_unused_edges_set(const TaggedEdges &edges);
 
         // Selects a subset (E-set) of AB-cycles randomly
         ESet select_e_set_rand(

@@ -20,8 +20,8 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     // STEP 1: build temporary AB-graph to produce AB-cycles (used in STEP 2 choose the E-set)
 
-    const std::vector<Edge> edges_a = get_edges(parent_a);
-    const std::vector<Edge> edges_b = get_edges(parent_b);
+    const Edges edges_a = get_edges(parent_a);
+    const Edges edges_b = get_edges(parent_b);
 
     const TaggedEdges tagged_edges = tag_edges_with_parent(edges_a, edges_b);
 
@@ -58,9 +58,9 @@ std::size_t EdgeHash::operator()(const EdgeKey &key) const noexcept {
 // Extracts all edges from a tour, including the closing edge 
 // from the last city to the first using modulo the tour length
 // e.g., { 1, 4, 2, 3 } to { (1, 4), (4, 2), (2, 3), (3, 1) }
-std::vector<Edge> get_edges(const Tour &tour) {
+Edges get_edges(const Tour &tour) {
 
-    std::vector<Edge> edges;
+    Edges edges;
     edges.reserve(tour.size());
 
     for (std::size_t from_idx = 0, N = tour.size(); from_idx < N; from_idx++) {
@@ -106,7 +106,7 @@ bool contains_edge(const EdgeSet &edge_set, const Edge &edge) {
 }
 
 // Builds a hash set of edges for fast memory lookups
-EdgeSet build_edge_set(const std::vector<Edge> &edges) {
+EdgeSet build_edge_set(const Edges &edges) {
     EdgeSet edge_set;
 
     for (const Edge &edge : edges) {
@@ -117,13 +117,13 @@ EdgeSet build_edge_set(const std::vector<Edge> &edges) {
 }
 
 // Return edges appear in "src" which do not appear in "other"
-std::vector<Edge> get_unique_edges(
-    const std::vector<Edge> &src,
-    const std::vector<Edge> &other) {
+Edges get_unique_edges(
+    const Edges &src,
+    const Edges &other) {
 
         EdgeSet other_set = build_edge_set(other);
 
-        std::vector<Edge> unique_edges;
+        Edges unique_edges;
         unique_edges.reserve(src.size());
 
         for (const Edge &edge : src) {
@@ -137,8 +137,8 @@ std::vector<Edge> get_unique_edges(
 
 // Lables each edge with the parent (A or B) it originated from
 TaggedEdges tag_edges_with_parent(
-    const std::vector<Edge> &edges_a,
-    const std::vector<Edge> &edges_b) {
+    const Edges &edges_a,
+    const Edges &edges_b) {
 
         TaggedEdges edges;
         edges.reserve(edges_a.size() + edges_b.size());
@@ -163,7 +163,7 @@ TaggedEdges tag_edges_with_parent(
 //     { {1, 4}, Parent::B }
 // };
 AbGraph build_ab_graph(
-    const std::vector<TaggedEdge> &edges,
+    const TaggedEdges &edges,
     std::size_t num_cities) {
         AbGraph graph(num_cities);
 
@@ -187,7 +187,7 @@ int get_other_endpoint(const TaggedEdge &te, int curr_city) {
 // Builds the initial collection of unused edges,
 // each edge being tracked once rather than once per endpoint:
 // (if edge (t, z) exists, there's no need for edge (z, t))
-TaggedEdgeSet build_unused_edges_set(const std::vector<TaggedEdge> &edges) {
+TaggedEdgeSet build_unused_edges_set(const TaggedEdges &edges) {
     TaggedEdgeSet unused_edges;
     unused_edges.reserve(edges.size());
 
@@ -485,7 +485,7 @@ ESet select_e_set(
     std::uniform_int_distribution<int> distrib(0, static_cast<int>(cycles.size() - 1));
     int anchor_cycle_idx = distrib(rng);
 
-    std::vector<int> initial_cycles = {anchor_cycle_idx};
+    std::vector<int> initial_cycles = { anchor_cycle_idx };
 
     std::uniform_int_distribution<int> coin_flip(0, 1);
 
@@ -519,6 +519,8 @@ ESet select_e_set(
 
     return e_set;
 }
+
+
 
 }
 
