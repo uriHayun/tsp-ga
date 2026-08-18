@@ -474,7 +474,7 @@ std::vector<int> get_cycle_half_edge_counts(const AbCycles &cycles) {
 ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
-    const std::vector<int> cycle_half_edge_counts,
+    const std::vector<int> &cycle_half_edge_counts,
     std::mt19937 &rng
 ) {
 
