@@ -23,7 +23,7 @@ struct City {
 };
 
 const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
-    std::mt19937 &rng, int k = 5);
+    std::mt19937 &rng, int K = 5);
 double fitness(const Tour &tour, const std::vector<City> &cities);
 double tour_dist(const Tour &tour, const std::vector<City> &cities);
 Tour rand_tour(const int N = 50);
@@ -49,7 +49,7 @@ int main() {
     }
 
     const std::string url = "https://secure.geonames.org/searchJSON"
-        "?country=US&featureClass=P&maxRows=100000&username=" + GEONAMES_USERNAME;
+        "?country=US&featureClass=P&maxRows=1000&username=" + GEONAMES_USERNAME;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive_data);
@@ -161,14 +161,14 @@ double fitness(const Tour &tour, const std::vector<City> &cities) {
 
 const Tour &tourney_select(
     const std::vector<Tour> &pop, const std::vector<City> &cities,
-    std::mt19937 &rng, int k) {
+    std::mt19937 &rng, int K) {
     assert(!pop.empty());
 
     std::uniform_int_distribution<std::size_t> distrib(0, pop.size() - 1);
     std::size_t best_cand_idx = distrib(rng);
     double best_score = fitness(pop[best_cand_idx], cities);
 
-    for (int i = 0; i < k - 1; i++) {
+    for (int i = 0; i < K - 1; i++) {
         const std::size_t cand_idx = distrib(rng);
         const double cand_score = fitness(pop[cand_idx], cities);
 
