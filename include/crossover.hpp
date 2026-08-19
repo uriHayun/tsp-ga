@@ -141,6 +141,12 @@ ESet select_e_set_rand(
     const AbCycles &cycles,
     std::mt19937 &rng,
     double inclusion_prob = 0.5);
+
+// Returns an intermediate, invalid solution represented as a edge-set
+// by removing A-edges that are in the E-set,
+// and adding B-edges that are in the E-set for each cycle
+EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set);
+
 }
 
 }

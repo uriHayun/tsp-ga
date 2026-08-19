@@ -40,7 +40,12 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
 
-    // STEP 3: TODO
+    // STEP 3: Generate an intermediate solution from parent-A by removing the edges of E-set's A-edges and
+    //         adding the edges of E-set's B-edges
+
+    const EdgeSet initial_offspring_edges = build_initial_offspring_edges(edges_a, e_set);
+
+    // STEP 4: TODO
 
     return {};
 }
@@ -520,7 +525,31 @@ ESet select_e_set(
     return e_set;
 }
 
+// Returns an intermidiate, invalid solution represented as a edge-set
+// by removing A-edges that are in the E-set,
+// and adding B-edges that are in the E-set for each cycle
+//
+// This breaks the global full lap-around cycle into disconnected loops,
+// though keeps every city connected to 2 edges
+// (since every removed A-edge is immediately rebalanced by adding the next B-edge in line)
+EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set) {
+    EdgeSet initial_offspring_edges = build_edge_set(edges_a);
 
+    for (const AbCycle &cycle : e_set) {
+
+        for (const TaggedEdge &te : cycle) {
+
+            if (te.parent == Parent::A) {
+                initial_offspring_edges.erase(normalize_edge(te.edge));
+            }
+            else {
+                initial_offspring_edges.insert(normalize_edge(te.edge));
+            }
+        }
+    }
+
+    return initial_offspring_edges;
+}
 
 }
 
