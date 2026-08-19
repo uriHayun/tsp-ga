@@ -13,7 +13,7 @@
 namespace Eax {
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours
-// and returns the resulting offspring
+// and returns the resulting offspring (child)
 Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     using namespace Detail;
@@ -90,7 +90,7 @@ std::size_t TaggedEdgeHash::operator()(const TaggedEdge &te) const noexcept {
 }
 
 // Equality function for using a TaggedEdge in an unordered_set
-// 2 TaggedEdges are considered equal if:
+// 2 TaggedEdges are considered equal if they:
 // connect the same cities + come from the same parent
 bool TaggedEdgeEqual::operator()(
     const TaggedEdge &lhs,
@@ -280,7 +280,7 @@ AbCycleWeights build_ab_cycle_weights(
     
     AbCycleWeights weights;
 
-    std::size_t num_cycles = cycles.size();
+    const std::size_t num_cycles = cycles.size();
 
     weights.shared_cities_total.assign(num_cycles, 0);
     weights.shared_cities_between.assign(num_cycles, std::vector<int>(num_cycles, 0));

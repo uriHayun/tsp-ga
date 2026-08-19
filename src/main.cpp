@@ -48,19 +48,17 @@ int main() {
         return 1;
     }
 
-    const std::string url = "https://secure.geonames.org/searchJSON"
+    const std::string URL = "https://secure.geonames.org/searchJSON"
         "?country=US&featureClass=P&maxRows=1000&username=" + GEONAMES_USERNAME;
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, URL.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive_data);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     
     // Follow HTTP redirects (301, 302) automatically
-    // libcurl excpects option values to be type long
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 
     // Prevent the request from hanging indefinitely by limiting the connection and total timeouts
-    // libcurl excpects option values to be type long
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 
