@@ -47,6 +47,8 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     // STEP 4: TODO
 
+    decompose_edges_into_subtours(initial_offspring_edges, parent_a.size());
+
     return {};
 }
 
@@ -525,7 +527,7 @@ ESet select_e_set(
     return e_set;
 }
 
-// Returns an intermidiate, invalid solution represented as a edge-set
+// Returns an intermediate, invalid solution represented as a edge-set
 // by removing A-edges that are in the E-set,
 // and adding B-edges that are in the E-set for each cycle
 //
@@ -549,6 +551,64 @@ EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set) {
     }
 
     return initial_offspring_edges;
+}
+
+// Decompose the list of edges ("initial_offspring_edges") into a list of subtours
+Subtours decompose_edges_into_subtours(
+    const EdgeSet &initial_offspring_edges,
+    const std::size_t &num_cities) {
+
+    std::vector<std::vector<int>> adj(num_cities);
+
+    // Build an adjencency graph to find out which are which neighbors
+    // to walk down the list of edges ("initial_offspring_edges")
+    for (const EdgeKey &edge : initial_offspring_edges) {
+        adj[edge.first].push_back(edge.second);
+        adj[edge.second].push_back(edge.first);
+    }
+
+    // Keep track of visited cities
+    // to know where to start a new "walk" (where a new subtour begins)
+    // to find the subtour
+    std::vector<bool> is_visited(num_cities, false);
+
+    Subtours subtours;
+
+    // Search for new subtours to retrieve
+    for (std::size_t city = 0, N = num_cities; city < N; city++) {
+
+        // An unvisited city marks the start of a new subtour
+        if (is_visited[city]) {
+            continue;
+        }
+
+        // Like we already passed start city to its neighbor
+        is_visited[city] = true;
+        int start_city = city;
+        int prev_city = start_city;
+        int curr_city = adj[start_city][0];  // The next city, start city's neighbor
+
+        Edges subtour;
+
+        // Retrieve newly found subtour
+        while (start_city != curr_city) {
+            subtour.push_back({ prev_city, curr_city });
+
+            is_visited[curr_city] = true;
+
+            int next_city = (adj[curr_city][0] == prev_city)
+                ? adj[curr_city][1]
+                : adj[curr_city][0];
+
+            prev_city = curr_city;
+            curr_city = next_city;
+        }
+
+        subtour.push_back({ prev_city, curr_city });
+        subtours.push_back(subtour);
+    }
+
+    return subtours;
 }
 
 }

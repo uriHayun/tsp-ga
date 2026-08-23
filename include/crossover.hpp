@@ -60,14 +60,19 @@ struct EdgeHash {
     std::size_t operator()(const EdgeKey &key) const noexcept;
 };
 
+// A set of edges, edges order doesn't matter, O(1) average insert/erase/lookup
 using EdgeSet = std::unordered_set<EdgeKey, EdgeHash>;
+
+// Same as "EdgeSet", but carries origin parent tag (A/B)
 using TaggedEdgeSet = std::unordered_set<TaggedEdge, TaggedEdgeHash, TaggedEdgeEqual>;
+
 using Edges = std::vector<Edge>;
 using TaggedEdges = std::vector<TaggedEdge>;
 using AbGraph = std::vector<std::vector<TaggedEdge>>;
 using AbCycle = std::vector<TaggedEdge>;
 using AbCycles = std::vector<AbCycle>;  // Full set of AB-cycles from the AB-graph
 using ESet = std::vector<AbCycle>;  // Selected subset forming the E-set
+using Subtours = std::vector<Edges>;
 
 // Extracts all edges from a tour
 Edges get_edges(const Tour &tour);
@@ -147,6 +152,10 @@ ESet select_e_set_rand(
 // and adding B-edges that are in the E-set for each cycle
 EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set);
 
+// Decompose the list of edges ("initial_offspring_edges") into a list of subtours
+Subtours decompose_edges_into_subtours(
+    const EdgeSet &initial_offspring_edges,
+    const std::size_t &num_cities);
 }
 
 }
