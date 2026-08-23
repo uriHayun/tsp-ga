@@ -527,7 +527,7 @@ ESet select_e_set(
     return e_set;
 }
 
-// Returns an intermediate, invalid solution represented as a edge-set
+// Returns an intermediate, invalid solution represented as an edge-set
 // by removing A-edges that are in the E-set,
 // and adding B-edges that are in the E-set for each cycle
 //
