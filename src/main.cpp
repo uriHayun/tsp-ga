@@ -1,3 +1,4 @@
+#include "city.hpp"
 #include "haversine.hpp"
 #include "tour.hpp"
 
@@ -16,11 +17,6 @@
 using json = nlohmann::json;
 
 namespace tsp {
-
-struct City {
-    double lat;
-    double lng;
-};
 
 const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
     std::mt19937 &rng, int K = 5);
@@ -142,7 +138,7 @@ double tour_dist(const Tour &tour, const std::vector<City> &cities) {
         
         // Wrap around to first using after the last city using modulo operator
         const City &from_city = cities[tour[(i + 1) % tour.size()]];
-        total_dist += haversine_dist(from_city.lat, from_city.lng, to_city.lat, to_city.lng);
+        total_dist += haversine_distance(from_city.lat, from_city.lng, to_city.lat, to_city.lng);
     }
 
     return total_dist;
@@ -231,7 +227,7 @@ std::string read_env_value(const std::string &key) {
 std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *output_buffer) {
     std::size_t total_size = size * count;
     std::string *res = static_cast<std::string *>(output_buffer);
-    res->append(static_cast<char *>(contents),  total_size);
+    res->append(static_cast<char *>(contents), total_size);
 
     return total_size;
 }

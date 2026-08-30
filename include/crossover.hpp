@@ -12,7 +12,9 @@
 
 namespace Eax {
 
-Tour crossover(const Tour &parent_a, const Tour &parent_b);
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
+// and returns the resulting offspring (child)
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities);
 
 namespace Detail {
 
@@ -28,7 +30,7 @@ enum class Parent {
     B
 };
 
-// Associates an ordinary edge with its originating parent
+// Labels an ordinary edge with its originating parent
 struct TaggedEdge {
     Edge edge;
     Parent parent;
@@ -97,7 +99,7 @@ AbCycles get_ab_cycles(
 // Builds measurements (weights) for each cycle based on their relationships
 AbCycleWeights build_ab_cycle_weights(
     const AbCycles &cycles,
-    std::size_t num_cities);
+    const std::size_t num_cities);
 
 // Gets half the number of edges for each cycle
 std::vector<int> get_cycle_half_edge_counts(const AbCycles &cycles);
@@ -118,7 +120,8 @@ std::vector<int> improve_e_set(
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_counts,
     std::mt19937 &rng,
-    const int max_consecutive_non_improving_iter_count = 20);
+    const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT = 20,
+    const int MAX_FROZEN_ITERS = 10);
 
 // Returns the canonical representation of an edge
 EdgeKey normalize_edge(const Edge &edge);
@@ -145,7 +148,7 @@ TaggedEdgeSet build_unused_edges_set(const TaggedEdges &edges);
 ESet select_e_set_rand(
     const AbCycles &cycles,
     std::mt19937 &rng,
-    double inclusion_prob = 0.5);
+    const double INCLUSION_PROB = 0.5);
 
 // Returns an intermediate, invalid solution represented as an edge-set
 // by removing A-edges that are in the E-set,
@@ -156,6 +159,21 @@ EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set);
 Subtours decompose_edges_into_subtours(
     const EdgeSet &initial_offspring_edges,
     const std::size_t &num_cities);
+
+// Wrapper function for computing distance between the edge's 2 cities
+// using "haversine_distance"
+double edge_len(const Edge &edge, const std::vector<City> &cities);
+
+// Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
+// and merging it wwhichever other subtour gives the cheapest merge,
+// from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
+// this process resumes until one subtour is left (they reduce by merging together)
+Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities);
+
+// Turn type-edges tour to a regular tour to return
+// e.g., { {1, 2}, {2, 4}, {4, 3}, {3, 1} } to { 1, 2, 4, 3 }
+Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities);
+
 }
 
 }

@@ -1,4 +1,6 @@
+#include "city.hpp"
 #include "crossover.hpp"
+#include "haversine.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -8,13 +10,14 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace Eax {
 
-// Performs Edge Assembly Crossover (EAX) between 2 parent tours
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b) {
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities) {
 
     using namespace Detail;
 
@@ -45,11 +48,15 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b) {
 
     const EdgeSet initial_offspring_edges = build_initial_offspring_edges(edges_a, e_set);
 
-    // STEP 4: TODO
+    // STEP 4: connect all sub-tours into a tour to generate a valid offspring
 
-    decompose_edges_into_subtours(initial_offspring_edges, parent_a.size());
+    const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges, parent_a.size());
 
-    return {};
+    const Edges offspring_edges = merge_subtours_to_tour(subtours, cities);
+
+    Tour offspring = edges_to_tour(offspring_edges, cities.size());
+
+    return offspring;
 }
 
 namespace Detail {
@@ -79,7 +86,7 @@ Edges get_edges(const Tour &tour) {
     return edges;
 }
 
-// Return a canonical representation of an edge
+// Return a standard representation of an edge
 // so that (t, z) and (z, t) are treated as identical
 EdgeKey normalize_edge(const Edge &edge) {
     return {
@@ -265,14 +272,14 @@ AbCycles get_ab_cycles(
 ESet select_e_set_rand(
     const AbCycles &cycles,
     std::mt19937 &rng,
-    double inclusion_prob) {
+    const double INCLUSION_PROB) {
         
     std::uniform_real_distribution<double> distrib(0.0, 1.0);
 
     ESet e_set;
 
     for (const AbCycle &cycle : cycles) {
-        if (distrib(rng) < inclusion_prob) {
+        if (distrib(rng) < INCLUSION_PROB) {
             e_set.push_back(cycle);
         }
     }
@@ -283,7 +290,7 @@ ESet select_e_set_rand(
 // Builds measurements (weights) for each cycle based on their relationships
 AbCycleWeights build_ab_cycle_weights(
     const AbCycles &cycles,
-    std::size_t num_cities) {
+    const std::size_t num_cities) {
     
     AbCycleWeights weights;
 
@@ -340,12 +347,17 @@ std::vector<int> improve_e_set(
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
     std::mt19937 &rng,
-    const int max_consecutive_non_improving_iter_count
-) {
+    const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT,
+    const int MAX_FROZEN_ITERS) {
 
     const std::size_t num_cycles = shared_cities_total.size();
 
-    // isUsed[i]: whether cycle "i" is currently in the E-set
+    // "Freeze" cycle when flipped for 10 iterations, preventing it from being immediately flipped back over again
+    // (cycles flipped had the highest score among the other cycles,
+    // this prevents then from naturally getting reverse-flipped fcountless times)
+    std::vector<int> freeze_iters_left(num_cycles, 0);
+
+    // is_used[i]: whether cycle "i" is currently in the E-set
     std::vector<bool> is_used(num_cycles, false);
 
     int conflicting_cities_count = 0;
@@ -387,7 +399,12 @@ std::vector<int> improve_e_set(
     int consecutive_non_improving_iter_count = 0;
     int best_conflicting_cities_count = conflicting_cities_count;  // The lower - the better
 
-    while (consecutive_non_improving_iter_count < max_consecutive_non_improving_iter_count) {
+    while (consecutive_non_improving_iter_count < MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT) {
+
+        // Update freeze-iterations passed each iteration for all cycles
+        for (int i = 0; i < num_cycles; i++) {
+            freeze_iters_left[i]--;
+        }
 
         // Valid cycle with smallest "delta"
         int best_cand_idx = -1;
@@ -403,11 +420,12 @@ std::vector<int> improve_e_set(
 
         for (int i = 0; i < num_cycles; i++) {
 
-            if (i == anchor_cycle_idx) {
+            if (i == anchor_cycle_idx ||
+                freeze_iters_left[i] > 0) {
                 continue;
             }
 
-            // How much the conflicting city count would change if cycle flipped 
+            // How much the conflicting city count would change if cycle flipped
             // (added if currently unselected, removed if currently selected)
             int delta;
             
@@ -437,6 +455,9 @@ std::vector<int> improve_e_set(
             else {
                 add_cycle(best_cand_idx);
             }
+
+            // "Freeze" the just-added cycle so it doesn't get instantly resersed-flipped
+            freeze_iters_left[best_cand_idx] = MAX_FROZEN_ITERS;
         }
 
         // Check if iteration set new record for lowest (best) conflictingCitiesCount
@@ -451,7 +472,7 @@ std::vector<int> improve_e_set(
         }
     }
 
-    // Convert used-cycle boolean array to best-cycle-index array to return
+    // Convert used-cycle boolean array to best cycle-index array to return
     std::vector<int> best_indices;
     for (int i = 0; i < num_cycles; i++) {
         if (best_is_used[i]) {
@@ -482,8 +503,7 @@ ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng
-) {
+    std::mt19937 &rng) {
 
     if (cycles.empty()) {
         return {};
@@ -609,6 +629,177 @@ Subtours decompose_edges_into_subtours(
     }
 
     return subtours;
+}
+
+// Returns the index of the subtour with the least number of elements
+std::size_t get_shortest_subtour_idx(const Subtours &subtours) {
+    std::size_t shortest_subtour_idx = 0;
+
+    for (std::size_t i = 1, N = subtours.size(); i < N; i++) {
+        if (subtours[i].size() < subtours[shortest_subtour_idx].size()) {
+            shortest_subtour_idx = i;
+        }
+    }
+
+    return shortest_subtour_idx;
+}
+
+// Wrapper function for computing distance between the edge's 2 cities
+// using "haversine_distance"
+double edge_len(const Edge &edge, const std::vector<City> &cities) {
+    const City &from = cities[edge.from];
+    const City &to = cities[edge.to];
+
+    return haversine_distance(from.lat, from.lng, to.lat, to.lng);
+}
+
+// Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
+// and merging it wwhichever other subtour gives the cheapest merge,
+// from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
+// this process resumes until one subtour is left (they reduce by merging together)
+Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities) {
+    while (subtours.size() > 1) {
+        const std::size_t shortest_subtour_idx = get_shortest_subtour_idx(subtours);
+
+        // Smallest found subtours' distance cost-change (link_cost - cut_cost)
+        // of cutting edges 1&2, and linking edes 3&4
+        double best_cost_change = std::numeric_limits<double>::infinity();
+
+        // The 4 edges which achieve the smallest (best) distance cost-change,
+        // edges 1&2 to remove from "subtours", edge3/edge4 to add to the subtours
+        Edge best_edge1 = {}, best_edge2 = {}, best_edge3 = {}, best_edge4 = {};
+
+        // Index of the subtour containing the winning edge2,
+        // subtours[best_cand_idx] to be merged with subtours[shortest_subtour_idx]
+        // once the search completes
+        std::size_t best_cand_idx = 0;
+
+        for (std::size_t i = 0, N = subtours.size(); i < N; i++) {
+            if (i == shortest_subtour_idx) {
+                continue;
+            }
+
+            // 1st edge (e) - derived from: each edge over the shortest subtour
+            for (const Edge &edge1 : subtours[shortest_subtour_idx]) {
+                // 2nd edge (e') - derived from: each edge over other subtours
+                // (excluding shortest subtour)
+                for (const Edge &edge2 : subtours[i]) {
+
+                    // 3rd, 4th edges (e'', e''') - constructed from: length-wise cheapest edges 1&2 merge
+
+                    const Edge edge3_a = { edge1.from, edge2.from };
+                    const Edge edge4_a = { edge1.to, edge2.to };
+
+                    const Edge edge3_b = { edge1.from, edge2.to };
+                    const Edge edge4_b = { edge1.to, edge2.from };
+
+                    // Compute edges 3&4's combined distance cost for later comparasion
+                    const double link_cost1 = edge_len(edge3_a, cities) + edge_len(edge4_a, cities);
+                    const double link_cost2 = edge_len(edge3_b, cities) + edge_len(edge4_b, cities);
+
+                    // Smallest distance cost of edges 3&4 to be linked to "subtours"
+                    double link_cost;
+
+                    Edge edge3, edge4;
+
+                    // Choose edges 3&4 with length-wise cheapest cost,
+                    // and keep their combined distance cost
+                    if (link_cost1 < link_cost2) {
+                        link_cost = link_cost1;
+
+                        edge3 = edge3_a;
+                        edge4 = edge4_a;
+                    } 
+                    else {
+                        link_cost = link_cost2;
+
+                        edge3 = edge3_b;
+                        edge4 = edge4_b;
+                    }
+
+                    // Smallest distance cost of edges 1&2 to be cut from "subtours"
+                    const double cut_cost = edge_len(edge1, cities) + edge_len(edge2, cities);
+                    
+                    const double cost_change = link_cost - cut_cost;
+
+                    if (cost_change < best_cost_change) {
+                        best_cost_change = cost_change;
+
+                        best_edge1 = edge1;
+                        best_edge2 = edge2;
+                        best_edge3 = edge3;
+                        best_edge4 = edge4;
+
+                        best_cand_idx = i;
+                    }
+                }
+            }
+        }
+
+        // Build type "Edges" offspring, later turned into a type "Tour" offspring
+        Edges offspring_edges = subtours[shortest_subtour_idx];
+        offspring_edges.reserve(subtours[shortest_subtour_idx].size() + subtours[best_cand_idx].size());
+
+        // Merge "subtours[shortest_subtour_idx]", and "subtours[best_cand_idx]"
+        offspring_edges.append_range(subtours[best_cand_idx]);
+
+        // Cut edges 1&2 from merged subset
+        std::erase_if(offspring_edges, [&](const Edge &edge) {
+             return normalize_edge(edge) == normalize_edge(best_edge1) || normalize_edge(edge) == normalize_edge(best_edge2); 
+        });
+
+        // Link edges 3&4 to merged subset
+        offspring_edges.push_back(best_edge3);
+        offspring_edges.push_back(best_edge4);
+
+        // Update "subtours" to reflect the merge: replace one of merged pair with merged result,
+        // and remove the other from the pair
+
+        // Overwrite one of merged pair with the merged result
+        subtours[shortest_subtour_idx] = offspring_edges;
+
+        // Remove the other subtour from the merged pair
+        // (subtours' order doesn't matter - so we're able to swap end subtour with wanted subtour to erase,
+        // and erase end-element in O(1), this avoid std::vector::erase's iterative O(n) slow approach)
+        std::swap(subtours[best_cand_idx], subtours.back());
+        subtours.pop_back();
+    }
+
+    // At this point, "subtours" only contains one final element - the type "Edges" tour
+    return subtours[0];
+}
+
+// Turn type-edges tour to a regular tour to return
+// e.g., { {1, 2}, {2, 4}, {4, 3}, {3, 1} } to { 1, 2, 4, 3 }
+Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
+    std::vector<std::vector<int>> adj(num_cities);
+
+    // Build an adjencency graph to find out which are which neighbors
+    // to walk down "tour_edges"
+    for (const Edge &edge : tour_edges) {
+        adj[edge.from].push_back(edge.to);
+        adj[edge.to].push_back(edge.from);
+    }
+
+    int start_city = tour_edges[0].from;
+    int prev_city = start_city;
+    int curr_city = adj[start_city][0];  // The next city, start city's neighbor
+
+    Tour tour;
+
+    // Build tour until touch "start_city" in the end-edge
+    while (start_city != curr_city) {
+        tour.push_back(curr_city);
+
+        int next_city = (adj[curr_city][0] == prev_city)
+            ? adj[curr_city][1]
+            : adj[curr_city][0];
+
+        prev_city = curr_city;
+        curr_city = next_city;
+    }
+
+    return tour;
 }
 
 }
