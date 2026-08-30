@@ -21,7 +21,7 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<Cit
 
     using namespace Detail;
 
-    // STEP 1: build temporary AB-graph to produce AB-cycles (used in STEP 2 choose the E-set)
+    // STEP 1: build temporary AB-graph to produce AB-cycles
 
     const Edges edges_a = get_edges(parent_a);
     const Edges edges_b = get_edges(parent_b);
@@ -30,9 +30,11 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<Cit
 
     const AbGraph graph = build_ab_graph(tagged_edges, parent_a.size());
 
-    const AbCycles cycles = get_ab_cycles(graph, tagged_edges);
+    // STEP 2: produce AB-cycles from the AB-graph
 
-    // STEP 2: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
+    const AbCycles cycles = build_ab_cycles(graph, tagged_edges);
+
+    // STEP 3: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
 
     const AbCycleWeights weights = build_ab_cycle_weights(cycles, parent_a.size());
     
@@ -43,12 +45,12 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<Cit
 
     const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
 
-    // STEP 3: Generate an intermediate solution from parent-A by removing the edges of E-set's A-edges and
+    // STEP 4: Generate an intermediate solution from parent-A by removing the edges of E-set's A-edges and
     //         adding the edges of E-set's B-edges
 
     const EdgeSet initial_offspring_edges = build_initial_offspring_edges(edges_a, e_set);
 
-    // STEP 4: connect all sub-tours into a tour to generate a valid offspring
+    // STEP 5: connect all sub-tours into a tour to generate a valid offspring
 
     const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges, parent_a.size());
 
@@ -215,7 +217,7 @@ TaggedEdgeSet build_unused_edges_set(const TaggedEdges &edges) {
 // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
 // path between A/B edges from an arbitrary edge until returning to the starting
 // city
-AbCycles get_ab_cycles(
+AbCycles build_ab_cycles(
     const AbGraph &graph,
     const TaggedEdges &edges) {
 

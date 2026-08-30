@@ -92,7 +92,7 @@ AbGraph build_ab_graph(
 // Transforms the AB-graph into AB-cycles by repeatedly walking an alternating
 // path between A/B edges from an arbitrary edge until returning to the starting
 // city
-AbCycles get_ab_cycles(
+AbCycles build_ab_cycles(
     const AbGraph &graph,
     const TaggedEdges &edges);
 
