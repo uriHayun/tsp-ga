@@ -17,7 +17,7 @@ namespace Eax {
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities) {
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities) {
 
     using namespace Detail;
 
@@ -88,7 +88,7 @@ Edges get_edges(const Tour &tour) {
     return edges;
 }
 
-// Return a standard representation of an edge
+// Returns a standard representation of an edge
 // so that (t, z) and (z, t) are treated as identical
 EdgeKey normalize_edge(const Edge &edge) {
     return {
@@ -132,7 +132,7 @@ EdgeSet build_edge_set(const Edges &edges) {
     return edge_set;
 }
 
-// Return edges appear in "src" which do not appear in "other"
+// Returns edges appear in "src" which do not appear in "other"
 Edges get_unique_edges(
     const Edges &src,
     const Edges &other) {
@@ -575,7 +575,7 @@ EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set) {
     return initial_offspring_edges;
 }
 
-// Decompose the list of edges ("initial_offspring_edges") into a list of subtours
+// Decomposes the list of edges ("initial_offspring_edges") into a list of subtours
 Subtours decompose_edges_into_subtours(
     const EdgeSet &initial_offspring_edges,
     const std::size_t &num_cities) {
@@ -648,18 +648,18 @@ std::size_t get_shortest_subtour_idx(const Subtours &subtours) {
 
 // Wrapper function for computing distance between the edge's 2 cities
 // using "haversine_distance"
-double edge_len(const Edge &edge, const std::vector<City> &cities) {
+double edge_len(const Edge &edge, const Cities &cities) {
     const City &from = cities[edge.from];
     const City &to = cities[edge.to];
 
-    return haversine_distance(from.lat, from.lng, to.lat, to.lng);
+    return haversine_distance(from, to);
 }
 
 // Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
 // and merging it wwhichever other subtour gives the cheapest merge,
 // from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
 // this process resumes until one subtour is left (they reduce by merging together)
-Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities) {
+Edges merge_subtours_to_tour(Subtours subtours, const Cities &cities) {
     while (subtours.size() > 1) {
         const std::size_t shortest_subtour_idx = get_shortest_subtour_idx(subtours);
 

@@ -6,33 +6,49 @@
 #include <cassert>
 #include <cstddef>
 #include <curl/curl.h>
+#include <format>
 #include <fstream>
-#include <iostream>
 #include <numeric>
 #include <nlohmann/json.hpp>
+#include <print>
 #include <random>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 #include <string>
 
 using json = nlohmann::json;
 
+using Tours = std::vector<Tour>;
+
 namespace tsp {
 
-const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
+const Tour &tourney_select(const Tours &pop, const Cities &cities,
     std::mt19937 &rng, int K = 5);
-double fitness(const Tour &tour, const std::vector<City> &cities);
-double tour_dist(const Tour &tour, const std::vector<City> &cities);
+double fitness(const Tour &tour, const Cities &cities);
+double tour_dist(const Tour &tour, const Cities &cities);
 Tour rand_tour(const int N = 50);
 std::string trim(const std::string &value);
 std::string read_env_value(const std::string &key);
 std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
+Cities load_cities(const std::size_t &NUM_CITIES = 1000);
+Tour greedy_tour(const Cities &cities, std::mt19937 &rng);
+void improve_tour(Tour &tour, const Cities &cities);
+Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+    const std::size_t &POP_SIZE = 200);
 
 int main() {
+    Cities cities = load_cities();
+
+    return 0;
+}
+
+//
+Cities load_cities(const size_t &NUM_CITIES) {
     CURL *curl = curl_easy_init();
     if (!curl) {
         // HTTP request failed
-        std::cerr << "Failed to initialize CURL\n";
-        return 1;
+        throw std::runtime_error("Failed to initialize CURL\n");
     }
 
     std::string response;
@@ -40,12 +56,12 @@ int main() {
     const std::string GEONAMES_USERNAME = read_env_value("GEONAMES_USERNAME");
     if (GEONAMES_USERNAME.empty()) {
         curl_easy_cleanup(curl);
-        std::cerr << "GEONAMES_USERNAME environment variable is not set\n";
-        return 1;
+
+        throw std::runtime_error("GEONAMES_USERNAME environment variable is not set\n");
     }
 
-    const std::string URL = "https://secure.geonames.org/searchJSON"
-        "?country=US&featureClass=P&maxRows=1000&username=" + GEONAMES_USERNAME;
+    const std::string URL = std::format("https://secure.geonames.org/searchJSON"
+        "?country=US&featureClass=P&maxRows={}&username={}", NUM_CITIES, GEONAMES_USERNAME);
 
     curl_easy_setopt(curl, CURLOPT_URL, URL.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive_data);
@@ -61,34 +77,34 @@ int main() {
     CURLcode result = curl_easy_perform(curl);
     if (result != CURLE_OK) {
         curl_easy_cleanup(curl);
-        std::cerr << "Failed to perform CURL request\n";
-        return 1;
+
+        throw std::runtime_error("Failed to perform CURL request\n");
     }
 
     long http_status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
     if (http_status != 200) {
         curl_easy_cleanup(curl);
-        std::cerr << "HTTP request failed with status code: " << http_status << '\n';
-        return 1;
+
+        throw std::runtime_error(std::format("HTTP request failed with status code: {}\n", http_status));
     }
 
     if (response.empty()) {
         curl_easy_cleanup(curl);
-        std::cerr << "Received empty response\n";
-        return 1;
+
+        throw std::runtime_error("Received empty response\n");
     }
 
     curl_easy_cleanup(curl);
 
+    Cities cities;
+
     try {
         json data = json::parse(response);
         if (!data.contains("geonames") || !data["geonames"].is_array()) {
-            std::cerr << R"(Invalid response format: "geonames" key not found or is not an array\n)";
-            return 1;
+            throw std::runtime_error(R"(Invalid response format:
+                "geonames" key not found or is not an array\n)");
         }
-
-        std::vector<City> cities;
 
         for (const auto &city : data["geonames"]) {
             cities.push_back({
@@ -98,20 +114,117 @@ int main() {
         }
 
         // Print longitude and latitude - just for verification for now
-        for (const auto &city : cities) {
-            std::cout << "City: lat=" << city.lat << ", lng=" << city.lng << '\n';
+        for (const City &city : cities) {
+            std::println("City: latitude={}, longitude={}", city.lat, city.lng);
         }
     }
     catch (const json::parse_error &e) {
-        std::cerr << "Failed to parse JSON response: " << e.what() << '\n';
-        return 1;
-    } 
+        throw std::runtime_error(std::format("Failed to parse JSON response: {}\n", e.what()));
+    }
     catch (json::exception &e) {
-        std::cerr << "JSON exception occurred: " << e.what() << '\n';
-        return 1;
+        throw std::runtime_error("JSON exception occurred: {}\n");
     }
 
-    return 0;
+    return cities;
+}
+
+// Builds a single tour derived from cities by greedily 
+// getting the nearest unvisited each iteration to be the next city
+Tour greedy_tour(const Cities &cities, std::mt19937 &rng) {
+    std::size_t num_cities = cities.size();
+    std::vector<bool> visited(num_cities, false);
+
+    // Get a random start city
+    std::uniform_int_distribution<std::size_t> distrib(0, num_cities - 1);
+    std::size_t start_city_idx = distrib(rng);
+
+    // Initialize tour with the random start city
+    Tour tour;
+    tour.reserve(num_cities);
+    tour.push_back(start_city_idx);
+    visited[start_city_idx] = true;
+
+    for (std::size_t i = 1; i < num_cities; i++) {
+        std::size_t curr_city_idx = tour.back();
+
+        double best_dist = std::numeric_limits<double>::infinity();
+        std::size_t nearest_city_idx = 0;
+        bool found_next = false;
+
+        // Find next unused nearest city
+        for (std::size_t cand_city_idx = 0; cand_city_idx < num_cities; cand_city_idx++) {
+            if (visited[cand_city_idx]) {
+                continue;
+            }
+
+            double dist = haversine_distance(cities[curr_city_idx], cities[cand_city_idx]);
+
+            if (dist < best_dist) {
+                best_dist = dist;
+                nearest_city_idx = cand_city_idx;
+                found_next = true;
+            }
+        }
+
+        // Sanity check: was a next city found?
+        assert(found_next && "No unvisited city found");
+
+        tour.push_back(nearest_city_idx);
+        visited[nearest_city_idx] = true;
+    }
+
+    return tour;
+}
+
+// Improves a tour using a search heuristic: repeatedly finds a pair of edges whose 
+// swapping shortens the tour, until it finds no improving swap left
+void improve_tour(Tour &tour, const Cities &cities) {
+    const std::size_t num_cities = cities.size();
+    bool improved = true;
+
+    // Keep until no swap improvement is left/found
+    while (improved) {
+        improved = false;
+
+        for (std::size_t i = 0; i < num_cities - 1; i++) {
+            for (std::size_t j = i + 1; j < num_cities; j++) {
+                // Edge 1's cities
+                std::size_t edge1_a = tour[i];
+                std::size_t edge1_b = tour[(i + 1) % num_cities];
+
+                // Edges 2's cities
+                std::size_t edge2_a = tour[j];
+                std::size_t edge2_b = tour[(j + 1) % num_cities];
+
+                const double before_dist = haversine_distance(cities[edge1_a], cities[edge1_b])
+                    + haversine_distance(cities[edge2_a], cities[edge2_b]);
+
+                const double after_dist = haversine_distance(cities[edge1_a], cities[edge2_a])
+                    + haversine_distance(cities[edge1_b], cities[edge2_b]);
+
+                if (after_dist < before_dist) {
+                    std::ranges::reverse(tour.begin() + i + 1, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
+        }
+    }
+}
+
+// Builds initial population of POP_SIZE tours,
+// each constructed greedily then improved with a search heuristic
+Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+    const std::size_t &POP_SIZE) {
+    Tours pop;
+    pop.reserve(POP_SIZE);
+
+    for (std::size_t i = 0 ; i < POP_SIZE; i++) {
+        Tour tour = greedy_tour(cities, rng);
+        improve_tour(tour, cities);
+        pop.push_back(std::move(tour));
+    }
+
+    return pop;
 }
 
 // Returns a random unsorted sequence of integers 0 to N-1
@@ -130,22 +243,22 @@ Tour rand_tour(const int N) {
 }
 
 // Returns the total distance of a tour represented by a state
-double tour_dist(const Tour &tour, const std::vector<City> &cities) {
+double tour_dist(const Tour &tour, const Cities &cities) {
     double total_dist = 0.0;
 
     for (std::size_t i = 0, N = tour.size(); i < N; i++) {
-        const City &to_city = cities[tour[i]];
+        const City &to = cities[tour[i]];
         
         // Wrap around to first using after the last city using modulo operator
-        const City &from_city = cities[tour[(i + 1) % tour.size()]];
-        total_dist += haversine_distance(from_city.lat, from_city.lng, to_city.lat, to_city.lng);
+        const City &from = cities[tour[(i + 1) % tour.size()]];
+        total_dist += haversine_distance(from, to);
     }
 
     return total_dist;
 }
 
 // Converts tour's distance into a fitness score, the higher the score the better it is
-double fitness(const Tour &tour, const std::vector<City> &cities) {
+double fitness(const Tour &tour, const Cities &cities) {
     double dist = tour_dist(tour, cities);
 
     // Fitness score is inversely proportional to distance
@@ -153,8 +266,9 @@ double fitness(const Tour &tour, const std::vector<City> &cities) {
     return 1.0 / (dist + 1e-9);
 }
 
+//
 const Tour &tourney_select(
-    const std::vector<Tour> &pop, const std::vector<City> &cities,
+    const Tours &pop, const Cities &cities,
     std::mt19937 &rng, int K) {
     assert(!pop.empty());
 
@@ -185,7 +299,6 @@ std::string trim(const std::string &value) {
     const auto last = value.find_last_not_of(" \t\r\n");
     return value.substr(first, last - first + 1);
 }
-
 
 // Reads the value associated with a key from a local .env file
 // Must cite AI-generated code: logic for reading from .env file 
@@ -220,6 +333,11 @@ std::string read_env_value(const std::string &key) {
     }
 
     return "";
+}
+
+//
+Tour &ga() {
+
 }
 
 // libcurl callback to append the HTTP received response data to a string
