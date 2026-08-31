@@ -1,18 +1,20 @@
 #pragma once
 
+#include "city.hpp"
+
 #include <cmath>
 #include <numbers>
 
 // Returns (air) distance in km between 2 points using Haversine formula
 // Note: < ~0.5% error (typically less), not worth using more precise formulas (e.g., Vincenty's)
-inline double haversine_distance(double lat1, double lng1, double lat2, double lng2) {
+inline double haversine_distance(const City &city1, const City &city2) {
     // Convert coordinates (in degrees) to radians
     auto degrees_to_radians = [](const double deg) { return deg * std::numbers::pi / 180.0; };
 
-    lat1 = degrees_to_radians(lat1);
-    lng1 = degrees_to_radians(lng1);
-    lat2 = degrees_to_radians(lat2);
-    lng2 = degrees_to_radians(lng2);
+    const double lat1 = degrees_to_radians(city1.lat);
+    const double lng1 = degrees_to_radians(city1.lng);
+    const double lat2 = degrees_to_radians(city2.lat);
+    const double lng2 = degrees_to_radians(city2.lng);
 
     // Differences in latitude/longitude between the 2 points (radians)
     const double delta_lat = lat2 - lat1;
@@ -25,6 +27,6 @@ inline double haversine_distance(double lat1, double lng1, double lat2, double l
     // Compute angular distance (radians)
     const double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
 
-    constexpr int EARTH_RADIUS_KM = 6371;
+    constexpr double EARTH_RADIUS_KM = 6371.0;
     return EARTH_RADIUS_KM * c;  // Air distance (km)
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "city.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -14,7 +15,7 @@ namespace Eax {
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities);
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities);
 
 namespace Detail {
 
@@ -162,13 +163,13 @@ Subtours decompose_edges_into_subtours(
 
 // Wrapper function for computing distance between the edge's 2 cities
 // using "haversine_distance"
-double edge_len(const Edge &edge, const std::vector<City> &cities);
+double edge_len(const Edge &edge, const Cities &cities);
 
 // Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
 // and merging it wwhichever other subtour gives the cheapest merge,
 // from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
 // this process resumes until one subtour is left (they reduce by merging together)
-Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities);
+Edges merge_subtours_to_tour(Subtours subtours, const Cities &cities);
 
 // Turn type-edges tour to a regular tour to return
 // e.g., { {1, 2}, {2, 4}, {4, 3}, {3, 1} } to { 1, 2, 4, 3 }
