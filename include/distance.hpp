@@ -1,6 +1,7 @@
 #pragma once
 
 #include "city.hpp"
+#include "edge.hpp"
 
 #include <cmath>
 #include <numbers>
@@ -29,4 +30,13 @@ inline double haversine_distance(const City &city1, const City &city2) {
 
     constexpr double EARTH_RADIUS_KM = 6371.0;
     return EARTH_RADIUS_KM * c;  // Air distance (km)
+}
+
+// Wrapper function for computing distance between the edge's 2 cities
+// using "haversine_distance"
+inline double edge_len(const Edge &edge, const Cities &cities) {
+    const City &from = cities[edge.from];
+    const City &to = cities[edge.to];
+
+    return haversine_distance(from, to);
 }
