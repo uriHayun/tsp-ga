@@ -1,5 +1,5 @@
 #include "city.hpp"
-#include "haversine.hpp"
+#include "distance.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -17,16 +17,14 @@
 #include <vector>
 #include <string>
 
-using json = nlohmann::json;
+using Json = nlohmann::json;
 
 using Tours = std::vector<Tour>;
-
-namespace tsp {
 
 const Tour &tourney_select(const Tours &pop, const Cities &cities,
     std::mt19937 &rng, int K = 5);
 double fitness(const Tour &tour, const Cities &cities);
-double tour_dist(const Tour &tour, const Cities &cities);
+double tour_len(const Tour &tour, const Cities &cities);
 Tour rand_tour(const int N = 50);
 std::string trim(const std::string &value);
 std::string read_env_value(const std::string &key);
@@ -100,7 +98,7 @@ Cities load_cities(const size_t &NUM_CITIES) {
     Cities cities;
 
     try {
-        json data = json::parse(response);
+        Json data = Json::parse(response);
         if (!data.contains("geonames") || !data["geonames"].is_array()) {
             throw std::runtime_error(R"(Invalid response format:
                 "geonames" key not found or is not an array\n)");
@@ -118,11 +116,11 @@ Cities load_cities(const size_t &NUM_CITIES) {
             std::println("City: latitude={}, longitude={}", city.lat, city.lng);
         }
     }
-    catch (const json::parse_error &e) {
+    catch (const Json::parse_error &e) {
         throw std::runtime_error(std::format("Failed to parse JSON response: {}\n", e.what()));
     }
-    catch (json::exception &e) {
-        throw std::runtime_error("JSON exception occurred: {}\n");
+    catch (Json::exception &e) {
+        throw std::runtime_error(std::format("JSON exception occurred: {}\n", e.what()));
     }
 
     return cities;
@@ -243,15 +241,14 @@ Tour rand_tour(const int N) {
 }
 
 // Returns the total distance of a tour represented by a state
-double tour_dist(const Tour &tour, const Cities &cities) {
+double tour_len(const Tour &tour, const Cities &cities) {
     double total_dist = 0.0;
 
     for (std::size_t i = 0, N = tour.size(); i < N; i++) {
-        const City &to = cities[tour[i]];
-        
-        // Wrap around to first using after the last city using modulo operator
-        const City &from = cities[tour[(i + 1) % tour.size()]];
-        total_dist += haversine_distance(from, to);
+            // In cities[tour[(i + 1) % tour.size()]] (from-city) wrap around to first 
+            // after last city using modulo operator
+            total_dist += edge_len({ tour[(i + 1) % tour.size()], tour[i] }, 
+                cities);
     }
 
     return total_dist;
@@ -259,7 +256,7 @@ double tour_dist(const Tour &tour, const Cities &cities) {
 
 // Converts tour's distance into a fitness score, the higher the score the better it is
 double fitness(const Tour &tour, const Cities &cities) {
-    double dist = tour_dist(tour, cities);
+    double dist = tour_len(tour, cities);
 
     // Fitness score is inversely proportional to distance
     // Add a small epsilon to avoid division by 0 (0 distance edge case)
@@ -348,6 +345,4 @@ std::size_t receive_data(void *contents, std::size_t size, std::size_t count, vo
     res->append(static_cast<char *>(contents), total_size);
 
     return total_size;
-}
-
 }

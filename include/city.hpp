@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 struct City {
     double lat;
     double lng;
