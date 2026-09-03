@@ -1,6 +1,7 @@
 #include "city.hpp"
 #include "crossover.hpp"
-#include "haversine.hpp"
+#include "distance.hpp"
+#include "edge.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -17,7 +18,7 @@ namespace Eax {
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities) {
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities) {
 
     using namespace Detail;
 
@@ -65,8 +66,8 @@ namespace Detail {
 
 // Hash function for using an Edge in an unordered_set
 std::size_t EdgeHash::operator()(const EdgeKey &key) const noexcept {
-    std::size_t h1 = std::hash<int>{}(key.first);
-    std::size_t h2 = std::hash<int>{}(key.second);
+    const std::size_t h1 = std::hash<std::size_t>{}(key.first);
+    const std::size_t h2 = std::hash<std::size_t>{}(key.second);
 
     return h1 ^ (h2 << 1);
 }
@@ -82,13 +83,13 @@ Edges get_edges(const Tour &tour) {
     for (std::size_t from_idx = 0, N = tour.size(); from_idx < N; from_idx++) {
         std::size_t to_idx = (from_idx + 1) % N;
 
-        edges.push_back({tour[from_idx], tour[to_idx]});
+        edges.push_back({ tour[from_idx], tour[to_idx] });
     }
 
     return edges;
 }
 
-// Return a standard representation of an edge
+// Returns a standard representation of an edge
 // so that (t, z) and (z, t) are treated as identical
 EdgeKey normalize_edge(const Edge &edge) {
     return {
@@ -132,7 +133,7 @@ EdgeSet build_edge_set(const Edges &edges) {
     return edge_set;
 }
 
-// Return edges appear in "src" which do not appear in "other"
+// Returns edges appear in "src" which do not appear in "other"
 Edges get_unique_edges(
     const Edges &src,
     const Edges &other) {
@@ -164,7 +165,7 @@ TaggedEdges tag_edges_with_parent(
         }
 
         for (const Edge &edge : edges_b) {
-            edges.push_back({edge, Parent::B});
+            edges.push_back({ edge, Parent::B });
         }
 
         return edges;
@@ -194,7 +195,7 @@ AbGraph build_ab_graph(
     }
 
 // Given endpoint of an edge, returns other endpoint
-int get_other_endpoint(const TaggedEdge &te, int curr_city) {
+std::size_t get_other_endpoint(const TaggedEdge &te, std::size_t curr_city) {
     return (te.edge.from == curr_city)
         ? te.edge.to
         : te.edge.from;
@@ -229,12 +230,12 @@ AbCycles build_ab_cycles(
         auto it = unused_edges.begin();
         TaggedEdge start_edge = *it;
         
-        int start_city = start_edge.edge.from;
+        std::size_t start_city = start_edge.edge.from;
 
         AbCycle curr_cycle;
 
         TaggedEdge curr_edge = start_edge;
-        int curr_city = curr_edge.edge.from;
+        std::size_t curr_city = curr_edge.edge.from;
 
         while (true) {
             curr_cycle.push_back(curr_edge);
@@ -303,7 +304,7 @@ AbCycleWeights build_ab_cycle_weights(
 
     std::vector<std::array<int, 2>> owning_cycle(num_cities, {-1, -1});
 
-    for (int i = 0; i < num_cycles; i++) {
+    for (std::size_t i = 0; i < num_cycles; i++) {
         for (const TaggedEdge &te : cycles[i]) {
 
             if (te.parent != Parent::A) {
@@ -322,7 +323,7 @@ AbCycleWeights build_ab_cycle_weights(
         }
     }
 
-    for (int city = 0; city < num_cities; city++) {
+    for (std::size_t city = 0; city < num_cities; city++) {
         int cycle_a = owning_cycle[city][0];
         int cycle_b = owning_cycle[city][1];
         
@@ -343,8 +344,8 @@ AbCycleWeights build_ab_cycle_weights(
 // Minimizes number of conflicting cities in the E-set
 // by iteratively adding/removing cycles
 std::vector<int> improve_e_set(
-    int anchor_cycle_idx,
-    const std::vector<int> &initial_cycles,
+    std::size_t anchor_cycle_idx,
+    const std::vector<std::size_t> &initial_cycles_idxs,
     const std::vector<int> &shared_cities_total,
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
@@ -370,31 +371,31 @@ std::vector<int> improve_e_set(
     // sum over each selected (used in the E-set) cycle "s" of shared_cities_between[i][s]
     std::vector<int> shared_cities_with_selected(num_cycles, 0);
 
-    // Adds cycle "addedIdx" to the E-set and updates its dependent states, "remove_cycle" exact inverse
-    auto add_cycle = [&](int added_idx) {
+    // Adds cycle "added_idx" to the E-set and updates its dependent states, "remove_cycle" exact inverse
+    auto add_cycle = [&](std::size_t added_idx) {
         is_used[added_idx] = true;
 
         conflicting_cities_count += shared_cities_total[added_idx] - 2*shared_cities_with_selected[added_idx];
 
-        for (int i = 0; i < num_cycles; i++) {
+        for (std::size_t i = 0; i < num_cycles; i++) {
             shared_cities_with_selected[i] += shared_cities_between[i][added_idx];
         }
     };
 
-    // Removes cycle "removedIdx" from the E-set and updates its dependent states, "add_cycle" exact inverse
-    auto remove_cycle = [&](int removed_idx) {
+    // Removes cycle "removed_idx" from the E-set and updates its dependent states, "add_cycle" exact inverse
+    auto remove_cycle = [&](std::size_t removed_idx) {
         is_used[removed_idx] = false;
 
         conflicting_cities_count -= shared_cities_total[removed_idx] - 2*shared_cities_with_selected[removed_idx];
 
-        for (int i = 0; i < num_cycles; i++) {
+        for (std::size_t i = 0; i < num_cycles; i++) {
             shared_cities_with_selected[i] -= shared_cities_between[i][removed_idx];
         }
     };
 
     // Build later-improved, initial E-set
-    for (int idx : initial_cycles) {
-        add_cycle(idx);
+    for (std::size_t i : initial_cycles_idxs) {
+        add_cycle(i);
     }
 
     std::vector<bool> best_is_used = is_used;
@@ -409,11 +410,11 @@ std::vector<int> improve_e_set(
         }
 
         // Valid cycle with smallest "delta"
-        int best_cand_idx = -1;
+        std::size_t best_cand_idx = -1;
 
         int best_delta = std::numeric_limits<int>::max();
 
-        auto consider_cand = [&](int idx, int delta) {
+        auto consider_cand = [&](std::size_t idx, int delta) {
             if (delta < best_delta) {
                 best_delta = delta;
                 best_cand_idx = idx;
@@ -512,9 +513,9 @@ ESet select_e_set(
     }
 
     std::uniform_int_distribution<int> distrib(0, static_cast<int>(cycles.size() - 1));
-    int anchor_cycle_idx = distrib(rng);
+    std::size_t anchor_cycle_idx = distrib(rng);
 
-    std::vector<int> initial_cycles = { anchor_cycle_idx };
+    std::vector<size_t> initial_cycles_idxs = { anchor_cycle_idx };
 
     std::uniform_int_distribution<int> coin_flip(0, 1);
 
@@ -532,17 +533,17 @@ ESet select_e_set(
 
         if (shares_city_with_anchor && is_smaller_than_anchor
             && coin_flip(rng) == 0) {
-            initial_cycles.push_back(i);
+            initial_cycles_idxs.push_back(i);
         }
     }
 
     std::vector<int> best_indices = improve_e_set(
-        anchor_cycle_idx, initial_cycles,
+        anchor_cycle_idx, initial_cycles_idxs,
         weights.shared_cities_total, weights.shared_cities_between,
         cycle_half_edge_counts, rng);
 
     ESet e_set;
-    for (int idx : best_indices) {
+    for (std::size_t idx : best_indices) {
         e_set.push_back(cycles[idx]);
     }
 
@@ -575,12 +576,12 @@ EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set) {
     return initial_offspring_edges;
 }
 
-// Decompose the list of edges ("initial_offspring_edges") into a list of subtours
+// Decomposes the list of edges ("initial_offspring_edges") into a list of subtours
 Subtours decompose_edges_into_subtours(
     const EdgeSet &initial_offspring_edges,
     const std::size_t &num_cities) {
 
-    std::vector<std::vector<int>> adj(num_cities);
+    std::vector<std::vector<std::size_t>> adj(num_cities);
 
     // Build an adjencency graph to find out which are which neighbors
     // to walk down the list of edges ("initial_offspring_edges")
@@ -606,9 +607,9 @@ Subtours decompose_edges_into_subtours(
 
         // Like we already passed start city to its neighbor
         is_visited[city] = true;
-        int start_city = city;
-        int prev_city = start_city;
-        int curr_city = adj[start_city][0];  // The next city, start city's neighbor
+        std::size_t start_city = city;
+        std::size_t prev_city = start_city;
+        std::size_t curr_city = adj[start_city][0];  // The next city, start city's neighbor
 
         Edges subtour;
 
@@ -618,7 +619,7 @@ Subtours decompose_edges_into_subtours(
 
             is_visited[curr_city] = true;
 
-            int next_city = (adj[curr_city][0] == prev_city)
+            std::size_t next_city = (adj[curr_city][0] == prev_city)
                 ? adj[curr_city][1]
                 : adj[curr_city][0];
 
@@ -646,20 +647,11 @@ std::size_t get_shortest_subtour_idx(const Subtours &subtours) {
     return shortest_subtour_idx;
 }
 
-// Wrapper function for computing distance between the edge's 2 cities
-// using "haversine_distance"
-double edge_len(const Edge &edge, const std::vector<City> &cities) {
-    const City &from = cities[edge.from];
-    const City &to = cities[edge.to];
-
-    return haversine_distance(from.lat, from.lng, to.lat, to.lng);
-}
-
 // Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
 // and merging it wwhichever other subtour gives the cheapest merge,
 // from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
 // this process resumes until one subtour is left (they reduce by merging together)
-Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities) {
+Edges merge_subtours_to_tour(Subtours subtours, const Cities &cities) {
     while (subtours.size() > 1) {
         const std::size_t shortest_subtour_idx = get_shortest_subtour_idx(subtours);
 
@@ -774,7 +766,7 @@ Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities)
 // Turn type-edges tour to a regular tour to return
 // e.g., { {1, 2}, {2, 4}, {4, 3}, {3, 1} } to { 1, 2, 4, 3 }
 Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
-    std::vector<std::vector<int>> adj(num_cities);
+    std::vector<std::vector<std::size_t>> adj(num_cities);
 
     // Build an adjencency graph to find out which are which neighbors
     // to walk down "tour_edges"
@@ -783,9 +775,9 @@ Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
         adj[edge.to].push_back(edge.from);
     }
 
-    int start_city = tour_edges[0].from;
-    int prev_city = start_city;
-    int curr_city = adj[start_city][0];  // The next city, start city's neighbor
+    std::size_t start_city = tour_edges[0].from;
+    std::size_t prev_city = start_city;
+    std::size_t curr_city = adj[start_city][0];  // The next city, start city's neighbor
 
     Tour tour;
 

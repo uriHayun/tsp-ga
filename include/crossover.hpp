@@ -51,7 +51,7 @@ struct TaggedEdgeEqual {
     bool operator()(const TaggedEdge &lhs, const TaggedEdge &rhs) const noexcept;
 };
 
-using EdgeKey = std::pair<int, int>;
+using EdgeKey = std::pair<std::size_t, std::size_t>;
 
 // Hash function for using an edge-key in an unordered_set
 struct EdgeHash {
@@ -110,8 +110,8 @@ ESet select_e_set(
 // Minimizes number of conflicting cities in the E-set 
 // by iteratively adding/removing cycles
 std::vector<int> improve_e_set(
-    int anchor_cycle_idx,
-    const std::vector<int> &initial_cycles,
+    std::size_t anchor_cycle_idx,
+    const std::vector<std::size_t> &initial_cycles_idxs,
     const std::vector<int> &shared_cities_total,
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_counts,
@@ -134,7 +134,7 @@ Edges get_unique_edges(
     const Edges &other);
 
 // Given endpoint of an edge, returns other endpoint
-int get_other_endpoint(const TaggedEdge &te, int curr_city);
+std::size_t get_other_endpoint(const TaggedEdge &te, std::size_t curr_city);
 
 // Builds the initial collection of unused edges,
 // each edge being tracked once rather than once per each endpoint
@@ -156,15 +156,11 @@ Subtours decompose_edges_into_subtours(
     const EdgeSet &initial_offspring_edges,
     const std::size_t &num_cities);
 
-// Wrapper function for computing distance between the edge's 2 cities
-// using "haversine_distance"
-double edge_len(const Edge &edge, const std::vector<City> &cities);
-
 // Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
 // and merging it wwhichever other subtour gives the cheapest merge,
 // from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
 // this process resumes until one subtour is left (they reduce by merging together)
-Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities);
+Edges merge_subtours_to_tour(Subtours subtours, const Cities &cities);
 
 // Turn type-edges tour to a regular tour to return
 // e.g., { {1, 2}, {2, 4}, {4, 3}, {3, 1} } to { 1, 2, 4, 3 }

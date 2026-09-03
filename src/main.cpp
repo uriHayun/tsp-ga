@@ -6,38 +6,47 @@
 #include <cassert>
 #include <cstddef>
 #include <curl/curl.h>
+#include <format>
 #include <fstream>
-#include <iostream>
 #include <numeric>
 #include <nlohmann/json.hpp>
+#include <print>
 #include <random>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 #include <string>
 
-using json = nlohmann::json;
+using Json = nlohmann::json;
 
 using Tours = std::vector<Tour>;
 
-const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
+const Tour &tourney_select(const Tours &pop, const Cities &cities,
     std::mt19937 &rng, int K = 5);
-double fitness(const Tour &tour, const std::vector<City> &cities);
-double tour_dist(const Tour &tour, const std::vector<City> &cities);
+double fitness(const Tour &tour, const Cities &cities);
+double tour_len(const Tour &tour, const Cities &cities);
 Tour rand_tour(const int N = 50);
 std::string trim(const std::string &value);
 std::string read_env_value(const std::string &key);
 std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
+Cities load_cities(const std::size_t &NUM_CITIES = 1000);
 Tour greedy_tour(const Cities &cities, std::mt19937 &rng);
 void improve_tour(Tour &tour, const Cities &cities);
 Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
     const std::size_t &POP_SIZE = 200);
 
 int main() {
+    Cities cities = load_cities();
+
+    return 0;
+}
+
+//
+Cities load_cities(const size_t &NUM_CITIES) {
     CURL *curl = curl_easy_init();
     if (!curl) {
         // HTTP request failed
-        std::cerr << "Failed to initialize CURL\n";
-        return 1;
+        throw std::runtime_error("Failed to initialize CURL\n");
     }
 
     std::string response;
@@ -45,12 +54,12 @@ int main() {
     const std::string GEONAMES_USERNAME = read_env_value("GEONAMES_USERNAME");
     if (GEONAMES_USERNAME.empty()) {
         curl_easy_cleanup(curl);
-        std::cerr << "GEONAMES_USERNAME environment variable is not set\n";
-        return 1;
+
+        throw std::runtime_error("GEONAMES_USERNAME environment variable is not set\n");
     }
 
-    const std::string URL = "https://secure.geonames.org/searchJSON"
-        "?country=US&featureClass=P&maxRows=1000&username=" + GEONAMES_USERNAME;
+    const std::string URL = std::format("https://secure.geonames.org/searchJSON"
+        "?country=US&featureClass=P&maxRows={}&username={}", NUM_CITIES, GEONAMES_USERNAME);
 
     curl_easy_setopt(curl, CURLOPT_URL, URL.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, receive_data);
@@ -66,34 +75,34 @@ int main() {
     CURLcode result = curl_easy_perform(curl);
     if (result != CURLE_OK) {
         curl_easy_cleanup(curl);
-        std::cerr << "Failed to perform CURL request\n";
-        return 1;
+
+        throw std::runtime_error("Failed to perform CURL request\n");
     }
 
     long http_status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
     if (http_status != 200) {
         curl_easy_cleanup(curl);
-        std::cerr << "HTTP request failed with status code: " << http_status << '\n';
-        return 1;
+
+        throw std::runtime_error(std::format("HTTP request failed with status code: {}\n", http_status));
     }
 
     if (response.empty()) {
         curl_easy_cleanup(curl);
-        std::cerr << "Received empty response\n";
-        return 1;
+
+        throw std::runtime_error("Received empty response\n");
     }
 
     curl_easy_cleanup(curl);
 
-    try {
-        json data = json::parse(response);
-        if (!data.contains("geonames") || !data["geonames"].is_array()) {
-            std::cerr << R"(Invalid response format: "geonames" key not found or is not an array\n)";
-            return 1;
-        }
+    Cities cities;
 
-        std::vector<City> cities;
+    try {
+        Json data = Json::parse(response);
+        if (!data.contains("geonames") || !data["geonames"].is_array()) {
+            throw std::runtime_error(R"(Invalid response format:
+                "geonames" key not found or is not an array\n)");
+        }
 
         for (const auto &city : data["geonames"]) {
             cities.push_back({
@@ -103,17 +112,15 @@ int main() {
         }
 
         // Print longitude and latitude - just for verification for now
-        for (const auto &city : cities) {
-            std::cout << "City: lat=" << city.lat << ", lng=" << city.lng << '\n';
+        for (const City &city : cities) {
+            std::println("City: latitude={}, longitude={}", city.lat, city.lng);
         }
     }
-    catch (const json::parse_error &e) {
-        std::cerr << "Failed to parse JSON response: " << e.what() << '\n';
-        return 1;
-    } 
-    catch (json::exception &e) {
-        std::cerr << "JSON exception occurred: " << e.what() << '\n';
-        return 1;
+    catch (const Json::parse_error &e) {
+        throw std::runtime_error(std::format("Failed to parse JSON response: {}\n", e.what()));
+    }
+    catch (Json::exception &e) {
+        throw std::runtime_error(std::format("JSON exception occurred: {}\n", e.what()));
     }
 
     return cities;
@@ -234,31 +241,31 @@ Tour rand_tour(const int N) {
 }
 
 // Returns the total distance of a tour represented by a state
-double tour_dist(const Tour &tour, const std::vector<City> &cities) {
+double tour_len(const Tour &tour, const Cities &cities) {
     double total_dist = 0.0;
 
     for (std::size_t i = 0, N = tour.size(); i < N; i++) {
-        const City &to_city = cities[tour[i]];
-        
-        // Wrap around to first using after the last city using modulo operator
-        const City &from_city = cities[tour[(i + 1) % tour.size()]];
-        total_dist += haversine_distance(from_city.lat, from_city.lng, to_city.lat, to_city.lng);
+            // In cities[tour[(i + 1) % tour.size()]] (from-city) wrap around to first 
+            // after last city using modulo operator
+            total_dist += edge_len({ tour[(i + 1) % tour.size()], tour[i] }, 
+                cities);
     }
 
     return total_dist;
 }
 
 // Converts tour's distance into a fitness score, the higher the score the better it is
-double fitness(const Tour &tour, const std::vector<City> &cities) {
-    double dist = tour_dist(tour, cities);
+double fitness(const Tour &tour, const Cities &cities) {
+    double dist = tour_len(tour, cities);
 
     // Fitness score is inversely proportional to distance
     // Add a small epsilon to avoid division by 0 (0 distance edge case)
     return 1.0 / (dist + 1e-9);
 }
 
+//
 const Tour &tourney_select(
-    const std::vector<Tour> &pop, const std::vector<City> &cities,
+    const Tours &pop, const Cities &cities,
     std::mt19937 &rng, int K) {
     assert(!pop.empty());
 
@@ -289,7 +296,6 @@ std::string trim(const std::string &value) {
     const auto last = value.find_last_not_of(" \t\r\n");
     return value.substr(first, last - first + 1);
 }
-
 
 // Reads the value associated with a key from a local .env file
 // Must cite AI-generated code: logic for reading from .env file 
@@ -339,6 +345,4 @@ std::size_t receive_data(void *contents, std::size_t size, std::size_t count, vo
     res->append(static_cast<char *>(contents), total_size);
 
     return total_size;
-}
-
 }
