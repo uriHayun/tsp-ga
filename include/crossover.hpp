@@ -12,7 +12,9 @@
 
 namespace Eax {
 
-Tour crossover(const Tour &parent_a, const Tour &parent_b);
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
+// and returns the resulting offspring (child)
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities);
 
 namespace Detail {
 
@@ -156,6 +158,13 @@ EdgeSet build_initial_offspring_edges(const Edges &edges_a, const ESet &e_set);
 Subtours decompose_edges_into_subtours(
     const EdgeSet &initial_offspring_edges,
     const std::size_t &num_cities);
+
+// Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
+// and merging it wwhichever other subtour gives the cheapest merge,
+// from the merged subtour, cut 2 edges (one from each subtour), and adds 2 (cheapest previously cut edges merge),
+// this process resumes until one subtour is left (they reduce by merging together)
+Edges merge_subtours_to_tour(Subtours subtours, const std::vector<City> &cities);
+
 }
 
 }

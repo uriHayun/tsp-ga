@@ -1,3 +1,4 @@
+#include "city.hpp"
 #include "haversine.hpp"
 #include "tour.hpp"
 
@@ -16,11 +17,6 @@
 using json = nlohmann::json;
 
 namespace tsp {
-
-struct City {
-    double lat;
-    double lng;
-};
 
 const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
     std::mt19937 &rng, int K = 5);
