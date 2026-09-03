@@ -118,7 +118,7 @@ std::vector<int> improve_e_set(
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_counts,
     std::mt19937 &rng,
-    const int max_consecutive_non_improving_iter_count = 20);
+    const int MAX_FROZEN_ITERS = 10);
 
 // Returns the canonical representation of an edge
 EdgeKey normalize_edge(const Edge &edge);

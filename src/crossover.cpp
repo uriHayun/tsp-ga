@@ -340,12 +340,16 @@ std::vector<int> improve_e_set(
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
     std::mt19937 &rng,
-    const int max_consecutive_non_improving_iter_count
-) {
+    const int MAX_FROZEN_ITERS) {
 
     const std::size_t num_cycles = shared_cities_total.size();
 
-    // isUsed[i]: whether cycle "i" is currently in the E-set
+    // "Freeze" cycle when flipped for 10 iterations, preventing it from being immediately flipped back over again
+    // (cycles flipped had the highest score among the other cycles,
+    // this prevents then from naturally getting reverse-flipped fcountless times)
+    std::vector<int> freeze_iters_left(num_cycles, 0);
+
+    // is_used[i]: whether cycle "i" is currently in the E-set
     std::vector<bool> is_used(num_cycles, false);
 
     int conflicting_cities_count = 0;
@@ -387,7 +391,11 @@ std::vector<int> improve_e_set(
     int consecutive_non_improving_iter_count = 0;
     int best_conflicting_cities_count = conflicting_cities_count;  // The lower - the better
 
-    while (consecutive_non_improving_iter_count < max_consecutive_non_improving_iter_count) {
+
+        // Update freeze-iterations passed each iteration for all cycles
+        for (int i = 0; i < num_cycles; i++) {
+            freeze_iters_left[i]--;
+        }
 
         // Valid cycle with smallest "delta"
         int best_cand_idx = -1;
@@ -403,11 +411,12 @@ std::vector<int> improve_e_set(
 
         for (int i = 0; i < num_cycles; i++) {
 
-            if (i == anchor_cycle_idx) {
+            if (i == anchor_cycle_idx ||
+                freeze_iters_left[i] > 0) {
                 continue;
             }
 
-            // How much the conflicting city count would change if cycle flipped 
+            // How much the conflicting city count would change if cycle flipped
             // (added if currently unselected, removed if currently selected)
             int delta;
             
@@ -437,6 +446,9 @@ std::vector<int> improve_e_set(
             else {
                 add_cycle(best_cand_idx);
             }
+
+            // "Freeze" the just-added cycle so it doesn't get instantly resersed-flipped
+            freeze_iters_left[best_cand_idx] = MAX_FROZEN_ITERS;
         }
 
         // Check if iteration set new record for lowest (best) conflictingCitiesCount
