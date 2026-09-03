@@ -1,5 +1,7 @@
 #pragma once
 
+#include "city.hpp"
+#include "edge.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -14,15 +16,9 @@ namespace Eax {
 
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities);
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities);
 
 namespace Detail {
-
-// Represents an edge between 2 cities (e.g., (4, 6))
-struct Edge {
-    int from;
-    int to;
-};
 
 // Labels whether edge is from parent A/B
 enum class Parent {

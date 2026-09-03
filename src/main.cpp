@@ -1,5 +1,5 @@
 #include "city.hpp"
-#include "haversine.hpp"
+#include "distance.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -11,12 +11,13 @@
 #include <numeric>
 #include <nlohmann/json.hpp>
 #include <random>
+#include <utility>
 #include <vector>
 #include <string>
 
 using json = nlohmann::json;
 
-namespace tsp {
+using Tours = std::vector<Tour>;
 
 const Tour &tourney_select(const std::vector<Tour> &pop, const std::vector<City> &cities,
     std::mt19937 &rng, int K = 5);
@@ -26,6 +27,10 @@ Tour rand_tour(const int N = 50);
 std::string trim(const std::string &value);
 std::string read_env_value(const std::string &key);
 std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
+Tour greedy_tour(const Cities &cities, std::mt19937 &rng);
+void improve_tour(Tour &tour, const Cities &cities);
+Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+    const std::size_t &POP_SIZE = 200);
 
 int main() {
     CURL *curl = curl_easy_init();
@@ -111,7 +116,106 @@ int main() {
         return 1;
     }
 
-    return 0;
+    return cities;
+}
+
+// Builds a single tour derived from cities by greedily 
+// getting the nearest unvisited each iteration to be the next city
+Tour greedy_tour(const Cities &cities, std::mt19937 &rng) {
+    std::size_t num_cities = cities.size();
+    std::vector<bool> visited(num_cities, false);
+
+    // Get a random start city
+    std::uniform_int_distribution<std::size_t> distrib(0, num_cities - 1);
+    std::size_t start_city_idx = distrib(rng);
+
+    // Initialize tour with the random start city
+    Tour tour;
+    tour.reserve(num_cities);
+    tour.push_back(start_city_idx);
+    visited[start_city_idx] = true;
+
+    for (std::size_t i = 1; i < num_cities; i++) {
+        std::size_t curr_city_idx = tour.back();
+
+        double best_dist = std::numeric_limits<double>::infinity();
+        std::size_t nearest_city_idx = 0;
+        bool found_next = false;
+
+        // Find next unused nearest city
+        for (std::size_t cand_city_idx = 0; cand_city_idx < num_cities; cand_city_idx++) {
+            if (visited[cand_city_idx]) {
+                continue;
+            }
+
+            double dist = haversine_distance(cities[curr_city_idx], cities[cand_city_idx]);
+
+            if (dist < best_dist) {
+                best_dist = dist;
+                nearest_city_idx = cand_city_idx;
+                found_next = true;
+            }
+        }
+
+        // Sanity check: was a next city found?
+        assert(found_next && "No unvisited city found");
+
+        tour.push_back(nearest_city_idx);
+        visited[nearest_city_idx] = true;
+    }
+
+    return tour;
+}
+
+// Improves a tour using a search heuristic: repeatedly finds a pair of edges whose 
+// swapping shortens the tour, until it finds no improving swap left
+void improve_tour(Tour &tour, const Cities &cities) {
+    const std::size_t num_cities = cities.size();
+    bool improved = true;
+
+    // Keep until no swap improvement is left/found
+    while (improved) {
+        improved = false;
+
+        for (std::size_t i = 0; i < num_cities - 1; i++) {
+            for (std::size_t j = i + 1; j < num_cities; j++) {
+                // Edge 1's cities
+                std::size_t edge1_a = tour[i];
+                std::size_t edge1_b = tour[(i + 1) % num_cities];
+
+                // Edges 2's cities
+                std::size_t edge2_a = tour[j];
+                std::size_t edge2_b = tour[(j + 1) % num_cities];
+
+                const double before_dist = haversine_distance(cities[edge1_a], cities[edge1_b])
+                    + haversine_distance(cities[edge2_a], cities[edge2_b]);
+
+                const double after_dist = haversine_distance(cities[edge1_a], cities[edge2_a])
+                    + haversine_distance(cities[edge1_b], cities[edge2_b]);
+
+                if (after_dist < before_dist) {
+                    std::ranges::reverse(tour.begin() + i + 1, tour.begin() + j + 1);
+                    improved = true;
+                }
+            }
+        }
+    }
+}
+
+// Builds initial population of POP_SIZE tours,
+// each constructed greedily then improved with a search heuristic
+Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+    const std::size_t &POP_SIZE) {
+    Tours pop;
+    pop.reserve(POP_SIZE);
+
+    for (std::size_t i = 0 ; i < POP_SIZE; i++) {
+        Tour tour = greedy_tour(cities, rng);
+        improve_tour(tour, cities);
+        pop.push_back(std::move(tour));
+    }
+
+    return pop;
 }
 
 // Returns a random unsorted sequence of integers 0 to N-1
@@ -220,6 +324,11 @@ std::string read_env_value(const std::string &key) {
     }
 
     return "";
+}
+
+//
+Tour &ga() {
+
 }
 
 // libcurl callback to append the HTTP received response data to a string
