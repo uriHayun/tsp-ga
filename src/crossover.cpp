@@ -1,5 +1,6 @@
 #include "city.hpp"
 #include "crossover.hpp"
+#include "haversine.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -9,13 +10,14 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace Eax {
 
-// Performs Edge Assembly Crossover (EAX) between 2 parent tours
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b) {
+Tour crossover(const Tour &parent_a, const Tour &parent_b, const std::vector<City> cities) {
 
     using namespace Detail;
 
@@ -84,7 +86,7 @@ Edges get_edges(const Tour &tour) {
     return edges;
 }
 
-// Return a canonical representation of an edge
+// Return a standard representation of an edge
 // so that (t, z) and (z, t) are treated as identical
 EdgeKey normalize_edge(const Edge &edge) {
     return {
@@ -270,14 +272,14 @@ AbCycles get_ab_cycles(
 ESet select_e_set_rand(
     const AbCycles &cycles,
     std::mt19937 &rng,
-    double inclusion_prob) {
+    const double INCLUSION_PROB) {
         
     std::uniform_real_distribution<double> distrib(0.0, 1.0);
 
     ESet e_set;
 
     for (const AbCycle &cycle : cycles) {
-        if (distrib(rng) < inclusion_prob) {
+        if (distrib(rng) < INCLUSION_PROB) {
             e_set.push_back(cycle);
         }
     }
@@ -288,7 +290,7 @@ ESet select_e_set_rand(
 // Builds measurements (weights) for each cycle based on their relationships
 AbCycleWeights build_ab_cycle_weights(
     const AbCycles &cycles,
-    std::size_t num_cities) {
+    const std::size_t num_cities) {
     
     AbCycleWeights weights;
 
@@ -345,6 +347,7 @@ std::vector<int> improve_e_set(
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
     std::mt19937 &rng,
+    const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT,
     const int MAX_FROZEN_ITERS) {
 
     const std::size_t num_cycles = shared_cities_total.size();
@@ -396,6 +399,7 @@ std::vector<int> improve_e_set(
     int consecutive_non_improving_iter_count = 0;
     int best_conflicting_cities_count = conflicting_cities_count;  // The lower - the better
 
+    while (consecutive_non_improving_iter_count < MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT) {
 
         // Update freeze-iterations passed each iteration for all cycles
         for (int i = 0; i < num_cycles; i++) {
@@ -468,7 +472,7 @@ std::vector<int> improve_e_set(
         }
     }
 
-    // Convert used-cycle boolean array to best-cycle-index array to return
+    // Convert used-cycle boolean array to best cycle-index array to return
     std::vector<int> best_indices;
     for (int i = 0; i < num_cycles; i++) {
         if (best_is_used[i]) {
@@ -499,8 +503,7 @@ ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng
-) {
+    std::mt19937 &rng) {
 
     if (cycles.empty()) {
         return {};
@@ -639,6 +642,15 @@ std::size_t get_shortest_subtour_idx(const Subtours &subtours) {
     }
 
     return shortest_subtour_idx;
+}
+
+// Wrapper function for computing distance between the edge's 2 cities
+// using "haversine_distance"
+double edge_len(const Edge &edge, const std::vector<City> &cities) {
+    const City &from = cities[edge.from];
+    const City &to = cities[edge.to];
+
+    return haversine_distance(from.lat, from.lng, to.lat, to.lng);
 }
 
 // Merges all subtours into a single valid type-edges tour, repeatedly taking the shortest subtour,
