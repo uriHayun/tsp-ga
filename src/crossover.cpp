@@ -11,17 +11,15 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 namespace Eax {
 
-// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
-// and returns the resulting offspring (child)
-Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities) {
+using namespace Detail;
 
-    using namespace Detail;
-
+std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b) {
     // STEP 1: build temporary AB-graph to produce AB-cycles
 
     const Edges edges_a = get_edges(parent_a);
@@ -35,14 +33,21 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities) 
 
     const AbCycles cycles = build_ab_cycles(graph, tagged_edges);
 
+    return { edges_a, cycles };
+}
+
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
+// and returns the resulting offspring (child)
+Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities) {
+
     // STEP 3: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
 
-    const AbCycleWeights weights = build_ab_cycle_weights(cycles, parent_a.size());
+    const AbCycleWeights weights = build_ab_cycle_weights(cycles, cities.size());
     
     const std::vector<int> cycle_half_edge_counts = get_cycle_half_edge_counts(cycles);
 
     std::random_device rd;
-    std::mt19937 rng(rd());
+    std::mt19937_64 rng(rd());
 
     const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
 
@@ -53,7 +58,8 @@ Tour crossover(const Tour &parent_a, const Tour &parent_b, const Cities cities) 
 
     // STEP 5: connect all sub-tours into a tour to generate a valid offspring
 
-    const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges, parent_a.size());
+    const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges,
+        cities.size());
 
     const Edges offspring_edges = merge_subtours_to_tour(subtours, cities);
 
@@ -274,7 +280,7 @@ AbCycles build_ab_cycles(
 // Selects a subset (E-set) of AB-cycles randomly
 ESet select_e_set_rand(
     const AbCycles &cycles,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const double INCLUSION_PROB) {
         
     std::uniform_real_distribution<double> distrib(0.0, 1.0);
@@ -349,7 +355,7 @@ std::vector<int> improve_e_set(
     const std::vector<int> &shared_cities_total,
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT,
     const int MAX_FROZEN_ITERS) {
 
@@ -506,7 +512,7 @@ ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng) {
+    std::mt19937_64 &rng) {
 
     if (cycles.empty()) {
         return {};
@@ -781,11 +787,13 @@ Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
 
     Tour tour;
 
+    tour.push_back(start_city);
+
     // Build tour until touch "start_city" in the end-edge
     while (start_city != curr_city) {
         tour.push_back(curr_city);
 
-        int next_city = (adj[curr_city][0] == prev_city)
+        std::size_t next_city = (adj[curr_city][0] == prev_city)
             ? adj[curr_city][1]
             : adj[curr_city][0];
 
