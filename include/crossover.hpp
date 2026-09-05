@@ -13,19 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace Eax {
-
-using namespace Detail;
-
-// TODO: comment here
-std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b);
-
-// TODO: change comment:
-// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
-// and returns the resulting offspring (child)
-Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities);
-
-namespace Detail {
+namespace Eax::Detail {
 
 // Labels whether edge is from parent A/B
 enum class Parent {
@@ -174,5 +162,17 @@ Edges merge_subtours_to_tour(Subtours subtours, const Cities &cities);
 Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities);
 
 }
+
+namespace Eax {
+
+using namespace Detail;
+
+// TODO: comment here
+std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b);
+
+// TODO: change comment:
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
+// and returns the resulting offspring (child)
+Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities);
 
 }

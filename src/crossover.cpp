@@ -15,62 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace Eax {
-
-using namespace Detail;
-
-// TODO: comment here
-std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b) {
-    // STEP 1: build temporary AB-graph to produce AB-cycles
-
-    const Edges edges_a = get_edges(parent_a);
-    const Edges edges_b = get_edges(parent_b);
-
-    const TaggedEdges tagged_edges = tag_edges_with_parent(edges_a, edges_b);
-
-    const AbGraph graph = build_ab_graph(tagged_edges, parent_a.size());
-
-    // STEP 2: produce AB-cycles from the AB-graph
-
-    const AbCycles cycles = build_ab_cycles(graph, tagged_edges);
-
-    return { edges_a, cycles };
-}
-
-// TODO: change comment:
-// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
-// and returns the resulting offspring (child)
-Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities) {
-
-    // STEP 3: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
-
-    const AbCycleWeights weights = build_ab_cycle_weights(cycles, cities.size());
-    
-    const std::vector<int> cycle_half_edge_counts = get_cycle_half_edge_counts(cycles);
-
-    std::random_device rd;
-    std::mt19937_64 rng(rd());
-
-    const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
-
-    // STEP 4: Generate an intermediate solution from parent-A by removing the edges of E-set's A-edges and
-    //         adding the edges of E-set's B-edges
-
-    const EdgeSet initial_offspring_edges = build_initial_offspring_edges(edges_a, e_set);
-
-    // STEP 5: connect all sub-tours into a tour to generate a valid offspring
-
-    const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges,
-        cities.size());
-
-    const Edges offspring_edges = merge_subtours_to_tour(subtours, cities);
-
-    Tour offspring = edges_to_tour(offspring_edges, cities.size());
-
-    return offspring;
-}
-
-namespace Detail {
+namespace Eax::Detail {
 
 // Hash function for using an Edge in an unordered_set
 std::size_t EdgeHash::operator()(const EdgeKey &key) const noexcept {
@@ -806,6 +751,61 @@ Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
     return tour;
 }
 
+}  // Closing namespace Eax::Detail
+
+namespace Eax {
+
+using namespace Detail;
+
+// TODO: comment here
+std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b) {
+    // STEP 1: build temporary AB-graph to produce AB-cycles
+
+    const Edges edges_a = get_edges(parent_a);
+    const Edges edges_b = get_edges(parent_b);
+
+    const TaggedEdges tagged_edges = tag_edges_with_parent(edges_a, edges_b);
+
+    const AbGraph graph = build_ab_graph(tagged_edges, parent_a.size());
+
+    // STEP 2: produce AB-cycles from the AB-graph
+
+    const AbCycles cycles = build_ab_cycles(graph, tagged_edges);
+
+    return { edges_a, cycles };
 }
 
+// TODO: change comment:
+// Performs Edge Assembly Crossover (EAX) between 2 parent tours,
+// and returns the resulting offspring (child)
+Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities) {
+
+    // STEP 3: select a subset (E-set) of AB-cycles to form the E-set for the crossover operation
+
+    const AbCycleWeights weights = build_ab_cycle_weights(cycles, cities.size());
+    
+    const std::vector<int> cycle_half_edge_counts = get_cycle_half_edge_counts(cycles);
+
+    std::random_device rd;
+    std::mt19937_64 rng(rd());
+
+    const ESet e_set = select_e_set(cycles, weights, cycle_half_edge_counts, rng);
+
+    // STEP 4: Generate an intermediate solution from parent-A by removing the edges of E-set's A-edges and
+    //         adding the edges of E-set's B-edges
+
+    const EdgeSet initial_offspring_edges = build_initial_offspring_edges(edges_a, e_set);
+
+    // STEP 5: connect all sub-tours into a tour to generate a valid offspring
+
+    const Subtours subtours = decompose_edges_into_subtours(initial_offspring_edges,
+        cities.size());
+
+    const Edges offspring_edges = merge_subtours_to_tour(subtours, cities);
+
+    Tour offspring = edges_to_tour(offspring_edges, cities.size());
+
+    return offspring;
 }
+
+}  // Closing namespace Eax
