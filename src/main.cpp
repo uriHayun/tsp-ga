@@ -1,4 +1,7 @@
+#define NOMINMAX
+
 #include "city.hpp"
+#include "crossover.hpp"
 #include "distance.hpp"
 #include "tour.hpp"
 
@@ -12,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <print>
 #include <random>
+#include <ranges>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -21,22 +25,25 @@ using Json = nlohmann::json;
 
 using Tours = std::vector<Tour>;
 
-const Tour &tourney_select(const Tours &pop, const Cities &cities,
-    std::mt19937 &rng, int K = 5);
+std::size_t tourney_select(const Tours &pop, const Cities &cities,
+    const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int K = 5);
 double fitness(const Tour &tour, const Cities &cities);
 double tour_len(const Tour &tour, const Cities &cities);
-Tour rand_tour(const int N = 50);
+Tour rand_tour(std::mt19937_64 &rng, const int N = 50);
 std::string trim(const std::string &value);
 std::string read_env_value(const std::string &key);
 std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
 Cities load_cities(const std::size_t &NUM_CITIES = 1000);
-Tour greedy_tour(const Cities &cities, std::mt19937 &rng);
+Tour greedy_tour(const Cities &cities, std::mt19937_64 &rng);
 void improve_tour(Tour &tour, const Cities &cities);
-Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+Tours build_init_pop(const Cities &cities, std::mt19937_64 &rng,
     const std::size_t &POP_SIZE = 200);
+Tour ga(const Cities &cities);
 
 int main() {
     Cities cities = load_cities();
+
+    Tour tour = ga(cities);
 
     return 0;
 }
@@ -128,7 +135,7 @@ Cities load_cities(const size_t &NUM_CITIES) {
 
 // Builds a single tour derived from cities by greedily 
 // getting the nearest unvisited each iteration to be the next city
-Tour greedy_tour(const Cities &cities, std::mt19937 &rng) {
+Tour greedy_tour(const Cities &cities, std::mt19937_64 &rng) {
     std::size_t num_cities = cities.size();
     std::vector<bool> visited(num_cities, false);
 
@@ -211,7 +218,7 @@ void improve_tour(Tour &tour, const Cities &cities) {
 
 // Builds initial population of POP_SIZE tours,
 // each constructed greedily then improved with a search heuristic
-Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
+Tours build_init_pop(const Cities &cities, std::mt19937_64 &rng,
     const std::size_t &POP_SIZE) {
     Tours pop;
     pop.reserve(POP_SIZE);
@@ -226,16 +233,13 @@ Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
 }
 
 // Returns a random unsorted sequence of integers 0 to N-1
-Tour rand_tour(const int N) {
+Tour rand_tour(std::mt19937_64 &rng, const int N) {
     // Create a state with N (50) ordered cities (0 to N-1)
     Tour tour(N);
-    std::iota(tour.begin(), tour.end(), 0);
+    std::ranges::iota(tour, 0);
 
     // Shuffle the ordered state to create a random state
-    std::random_device rd;
-    std::mt19937 rng(rd());
-
-    std::shuffle(tour.begin(), tour.end(), rng);
+    std::ranges::shuffle(tour, rng);
 
     return tour;
 }
@@ -263,19 +267,20 @@ double fitness(const Tour &tour, const Cities &cities) {
     return 1.0 / (dist + 1e-9);
 }
 
-//
-const Tour &tourney_select(
+// TODO: comment here
+std::size_t tourney_select(
     const Tours &pop, const Cities &cities,
-    std::mt19937 &rng, int K) {
+    const std::vector<double> &fitness_scores,
+    std::mt19937_64 &rng, const int K) {
     assert(!pop.empty());
 
     std::uniform_int_distribution<std::size_t> distrib(0, pop.size() - 1);
     std::size_t best_cand_idx = distrib(rng);
-    double best_score = fitness(pop[best_cand_idx], cities);
+    double best_score = fitness_scores[best_cand_idx];
 
     for (int i = 0; i < K - 1; i++) {
         const std::size_t cand_idx = distrib(rng);
-        const double cand_score = fitness(pop[cand_idx], cities);
+        const double cand_score = fitness_scores[cand_idx];
 
         if (best_score < cand_score) {
             // Current candidate becomes the best candidate
@@ -283,7 +288,8 @@ const Tour &tourney_select(
             best_score = cand_score;
         }
     }
-    return pop[best_cand_idx];  // Best candidate from tournament
+
+    return best_cand_idx;  // Best candidate from tournament
 }
 
 // Removes leading and trailing whitespace from a string
@@ -333,8 +339,42 @@ std::string read_env_value(const std::string &key) {
 }
 
 //
-Tour &ga() {
+Tour ga(const Cities &cities) {
+    using Eax::init_crossover;
+    using Eax::crossover;
 
+    std::random_device rd;
+    std::mt19937_64 rng(rd());
+
+    Tours pop = build_init_pop(cities, rng);
+
+    std::vector<double> fitness_scores;
+    fitness_scores.reserve(pop.size());
+
+    for (const Tour &tour : pop) {
+        fitness_scores.push_back(fitness(tour, cities));
+    }
+
+    int gen_count = 0;
+
+    // Temporary end-condition, later will benchmark/further check
+    while (gen_count < 1000) {
+        const std::size_t parent_a_idx = tourney_select(pop, cities, fitness_scores, rng);
+        const std::size_t parent_b_idx = tourney_select(pop, cities, fitness_scores, rng);
+
+        auto [edges_a, cycles] = init_crossover(pop[parent_a_idx], pop[parent_b_idx]);
+        const Tour offspring = crossover(cycles, edges_a, cities);
+
+        if (tour_len(offspring, cities) < tour_len(pop[parent_a_idx], cities)) {
+            pop[parent_a_idx] = offspring;
+
+            fitness_scores[parent_a_idx] = fitness(offspring, cities);
+        }
+
+        gen_count++;
+    }
+
+    return std::ranges::min(pop, {}, [&](const Tour &tour) { return tour_len(tour, cities); });
 }
 
 // libcurl callback to append the HTTP received response data to a string

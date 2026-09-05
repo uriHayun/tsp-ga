@@ -19,6 +19,7 @@ namespace Eax {
 
 using namespace Detail;
 
+// TODO: comment here
 std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &parent_b) {
     // STEP 1: build temporary AB-graph to produce AB-cycles
 
@@ -36,6 +37,7 @@ std::tuple<Edges, AbCycles> init_crossover(const Tour &parent_a, const Tour &par
     return { edges_a, cycles };
 }
 
+// TODO: change comment:
 // Performs Edge Assembly Crossover (EAX) between 2 parent tours,
 // and returns the resulting offspring (child)
 Tour crossover(const AbCycles &cycles, const Edges &edges_a, const Cities cities) {
