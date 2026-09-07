@@ -346,16 +346,13 @@ Tours build_init_pop(const Cities &cities, std::mt19937_64 &rng,
 }
 
 // Returns a random unsorted sequence of integers 0 to N-1
-Tour rand_tour(const int N) {
+Tour rand_tour(std::mt19937_64 &rng, const int N) {
     // Create a state with N (50) ordered cities (0 to N-1)
     Tour tour(N);
-    std::iota(tour.begin(), tour.end(), 0);
+    std::ranges::iota(tour, 0);
 
     // Shuffle the ordered state to create a random state
-    std::random_device rd;
-    std::mt19937 rng(rd());
-
-    std::shuffle(tour.begin(), tour.end(), rng);
+    std::ranges::shuffle(tour, rng);
 
     return tour;
 }
@@ -383,19 +380,18 @@ double fitness(const Tour &tour, const Cities &cities) {
     return 1.0 / (dist + 1e-9);
 }
 
-//
-const Tour &tourney_select(
-    const Tours &pop, const Cities &cities,
-    std::mt19937 &rng, int K) {
+// TODO: comment here
+std::size_t tourney_select(const Tours &pop, const Cities &cities,
+    const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int K) {
     assert(!pop.empty());
 
     std::uniform_int_distribution<std::size_t> distrib(0, pop.size() - 1);
     std::size_t best_cand_idx = distrib(rng);
-    double best_score = fitness(pop[best_cand_idx], cities);
+    double best_score = fitness_scores[best_cand_idx];
 
     for (int i = 0; i < K - 1; i++) {
         const std::size_t cand_idx = distrib(rng);
-        const double cand_score = fitness(pop[cand_idx], cities);
+        const double cand_score = fitness_scores[cand_idx];
 
         if (best_score < cand_score) {
             // Current candidate becomes the best candidate

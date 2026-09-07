@@ -100,7 +100,7 @@ ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng);
+    std::mt19937_64 &rng);
 
 // Minimizes number of conflicting cities in the E-set 
 // by iteratively adding/removing cycles
@@ -110,7 +110,7 @@ std::vector<int> improve_e_set(
     const std::vector<int> &shared_cities_total,
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT = 20,
     const int MAX_FROZEN_ITERS = 10);
 
@@ -138,7 +138,7 @@ TaggedEdgeSet build_unused_edges_set(const TaggedEdges &edges);
 // Selects a subset (E-set) of AB-cycles randomly
 ESet select_e_set_rand(
     const AbCycles &cycles,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const double INCLUSION_PROB = 0.5);
 
 // Returns an intermediate, invalid solution represented as an edge-set

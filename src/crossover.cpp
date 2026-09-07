@@ -227,7 +227,7 @@ AbCycles build_ab_cycles(
 // Selects a subset (E-set) of AB-cycles randomly
 ESet select_e_set_rand(
     const AbCycles &cycles,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const double INCLUSION_PROB) {
         
     std::uniform_real_distribution<double> distrib(0.0, 1.0);
@@ -302,7 +302,7 @@ std::vector<int> improve_e_set(
     const std::vector<int> &shared_cities_total,
     const std::vector<std::vector<int>> &shared_cities_between,
     const std::vector<int> &cycle_half_edge_count,
-    std::mt19937 &rng,
+    std::mt19937_64 &rng,
     const int MAX_CONSECUTIVE_NON_IMPROVING_ITERS_COUNT,
     const int MAX_FROZEN_ITERS) {
 
@@ -459,7 +459,7 @@ ESet select_e_set(
     const AbCycles &cycles,
     const AbCycleWeights &weights,
     const std::vector<int> &cycle_half_edge_counts,
-    std::mt19937 &rng) {
+    std::mt19937_64 &rng) {
 
     if (cycles.empty()) {
         return {};
@@ -734,11 +734,13 @@ Tour edges_to_tour(Edges tour_edges, const std::size_t &num_cities) {
 
     Tour tour;
 
+    tour.push_back(start_city);
+
     // Build tour until touch "start_city" in the end-edge
     while (start_city != curr_city) {
         tour.push_back(curr_city);
 
-        int next_city = (adj[curr_city][0] == prev_city)
+        std::size_t next_city = (adj[curr_city][0] == prev_city)
             ? adj[curr_city][1]
             : adj[curr_city][0];
 
