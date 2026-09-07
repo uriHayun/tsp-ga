@@ -1,8 +1,12 @@
+#define NOMINMAX
+
 #include "city.hpp"
+#include "crossover.hpp"
 #include "distance.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
+#include <asio.hpp>
 #include <cassert>
 #include <cstddef>
 #include <curl/curl.h>
@@ -12,31 +16,49 @@
 #include <nlohmann/json.hpp>
 #include <print>
 #include <random>
+#include <ranges>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 #include <string>
 
 using Json = nlohmann::json;
-
 using Tours = std::vector<Tour>;
 
-const Tour &tourney_select(const Tours &pop, const Cities &cities,
-    std::mt19937 &rng, int K = 5);
-double fitness(const Tour &tour, const Cities &cities);
-double tour_len(const Tour &tour, const Cities &cities);
-Tour rand_tour(const int N = 50);
-std::string trim(const std::string &value);
-std::string read_env_value(const std::string &key);
-std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
-Cities load_cities(const std::size_t &NUM_CITIES = 1000);
-Tour greedy_tour(const Cities &cities, std::mt19937 &rng);
-void improve_tour(Tour &tour, const Cities &cities);
-Tours build_init_pop(const Cities &cities, std::mt19937 &rng,
-    const std::size_t &POP_SIZE = 200);
+constexpr std::size_t MAX_GEN_COUNT = 1000;
 
 int main() {
+    using namespace Tsp;
+
+    asio::io_context io;
+
+    asio::ip::tcp::acceptor acceptor(
+        io, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 6767));
+
+    asio::ip::tcp::socket socket(io);
+    acceptor.accept(socket);
+    std::println("Connected!");
+
     Cities cities = load_cities();
+    asio::write(socket, asio::buffer(cities_to_json(cities)));
+
+    auto [pop, fitness_scores, rng] = init_ga(cities);
+
+    std::size_t gen_count = 0;
+    double last_tour_len = std::numeric_limits<double>::max();
+
+    // Temporary end-condition, later will benchmark/further check
+    while (gen_count < MAX_GEN_COUNT) {
+        Tour curr_tour = run_gen(pop, fitness_scores, rng, cities);
+        gen_count++;
+
+        double curr_tour_len = tour_len(curr_tour, cities);
+
+        if (curr_tour_len < last_tour_len) {
+            asio::write(socket, asio::buffer(tour_to_json(curr_tour)));
+            last_tour_len = curr_tour_len;
+        }
+    }
 
     return 0;
 }
