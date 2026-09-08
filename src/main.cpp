@@ -382,7 +382,8 @@ double fitness(const Tour &tour, const Cities &cities) {
     return 1.0 / (dist + 1e-9);
 }
 
-// TODO: comment here
+// Selects the shortest (best) tour from a set of NUM_CANDS candidates
+// using tournament selection
 std::size_t tourney_select(const Tours &pop, const Cities &cities,
     const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int NUM_CANDS) {
     assert(!pop.empty());
@@ -422,7 +423,9 @@ std::tuple<Tours, std::vector<double>, std::mt19937_64> init_ga(const Cities &ci
     return { std::move(pop), std::move(fitness_scores), std::move(rng) };
 }
 
-// TODO: comment here
+// the GA's main procedure:
+// TODO: explain GA's main procedure: start -> initialization -> crossover -> (bc of EAX there's no mutation) 
+// -> fitness (evaluation) -> selection -> end-condition (temporary) -> end
 Tour run_gen(Tours &pop, std::vector<double> &fitness_scores, std::mt19937_64 &rng, const Cities &cities) {
     using Eax::init_crossover;
     using Eax::crossover;
