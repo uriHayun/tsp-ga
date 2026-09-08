@@ -28,6 +28,12 @@ using Json = nlohmann::json;
 constexpr std::size_t MAX_GEN_COUNT = 1000;
 
 int main() {
+
+}
+
+// Transfers the cities array once, and a tour each generation to Lua LÖVE2D to draw
+// using an Asio TCP socket as an IPC server connection
+void run_ipc_server() {
     using namespace Tsp;
     using namespace Tsp::Ga;
 
@@ -70,8 +76,6 @@ int main() {
             last_tour_len = curr_tour_len;
         }
     }
-
-    return 0;
 }
 
 namespace Tsp::Utils {
