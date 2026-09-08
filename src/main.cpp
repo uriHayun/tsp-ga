@@ -3,6 +3,7 @@
 #include "city.hpp"
 #include "crossover.hpp"
 #include "distance.hpp"
+#include "main.hpp"
 #include "tour.hpp"
 
 #include <algorithm>
@@ -23,22 +24,31 @@
 #include <string>
 
 using Json = nlohmann::json;
-using Tours = std::vector<Tour>;
 
 constexpr std::size_t MAX_GEN_COUNT = 1000;
 
 int main() {
     using namespace Tsp;
+    using namespace Tsp::Ga;
 
     asio::io_context io;
 
-    asio::ip::tcp::acceptor acceptor(
-        io, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), 6767));
+    // Requests dynamic private port number from the OS
+    constexpr unsigned short PORT_NUM = 0;
+
+    asio::ip::tcp::acceptor acceptor(io,
+        asio::ip::tcp::endpoint(asio::ip::tcp::v6(), PORT_NUM));
+
+    // Allow IPv4 connections as well as IPv6
+    acceptor.set_option(asio::ip::v6_only(false));
 
     asio::ip::tcp::socket socket(io);
+
+    // Block execution until LÖVE2D connects
     acceptor.accept(socket);
     std::println("Connected!");
 
+    // Build & send once the cities array to LÖVE2D
     Cities cities = load_cities();
     asio::write(socket, asio::buffer(cities_to_json(cities)));
 
@@ -55,6 +65,7 @@ int main() {
         double curr_tour_len = tour_len(curr_tour, cities);
 
         if (curr_tour_len < last_tour_len) {
+            // Send the chosen tour to LÖVE2D to draw each generation
             asio::write(socket, asio::buffer(tour_to_json(curr_tour)));
             last_tour_len = curr_tour_len;
         }
@@ -64,8 +75,6 @@ int main() {
 }
 
 namespace Tsp::Utils {
-std::string trim(const std::string &value);
-std::string read_env_value(const std::string &key);
 
 // Removes leading and trailing whitespace from a string
 std::string trim(const std::string &value) {
@@ -117,14 +126,6 @@ std::string read_env_value(const std::string &key) {
 
 namespace Tsp {
 
-double tour_len(const Tour &tour, const Cities &cities);
-
-Cities load_cities(const std::size_t &NUM_CITIES = 1000);
-std::size_t receive_data(void *contents, std::size_t size, std::size_t count, void *userp);
-
-std::string cities_to_json(const Cities &cities);
-std::string tour_to_json(const Tour &tour);
-
 // Returns the total distance of a tour represented by a state
 double tour_len(const Tour &tour, const Cities &cities) {
     double total_dist = 0.0;
@@ -149,7 +150,7 @@ Cities load_cities(const size_t &NUM_CITIES) {
 
     std::string response;
     
-    const std::string GEONAMES_USERNAME = read_env_value("GEONAMES_USERNAME");
+    const std::string GEONAMES_USERNAME = Utils::read_env_value("GEONAMES_USERNAME");
     if (GEONAMES_USERNAME.empty()) {
         curl_easy_cleanup(curl);
 
@@ -256,17 +257,6 @@ std::string tour_to_json(const Tour &tour) {
 }  // Closing namespace Tsp
 
 namespace Tsp::Ga {
-
-Tour greedy_tour(const Cities &cities, std::mt19937_64 &rng);
-void improve_tour(Tour &tour, const Cities &cities);
-Tours build_init_pop(const Cities &cities, std::mt19937_64 &rng,
-    const std::size_t &POP_SIZE = 200);
-Tour rand_tour(std::mt19937_64 &rng, const int N = 50);
-double fitness(const Tour &tour, const Cities &cities);
-std::size_t tourney_select(const Tours &pop, const Cities &cities,
-    const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int K = 5);
-std::tuple<Tours, std::vector<double>, std::mt19937_64> init_ga(const Cities &cities);
-Tour run_gen(Tours &pop, std::vector<double> &fitness_scores, std::mt19937_64 &rng, const Cities &cities);
 
 // Builds a single tour derived from cities by greedily 
 // getting the nearest unvisited each iteration to be the next city
@@ -379,20 +369,6 @@ Tour rand_tour(std::mt19937_64 &rng, const int N) {
     return tour;
 }
 
-// Returns the total distance of a tour represented by a state
-double tour_len(const Tour &tour, const Cities &cities) {
-    double total_dist = 0.0;
-
-    for (std::size_t i = 0, N = tour.size(); i < N; i++) {
-            // In cities[tour[(i + 1) % tour.size()]] (from-city) wrap around to first 
-            // after last city using modulo operator
-            total_dist += edge_len({ tour[(i + 1) % tour.size()], tour[i] }, 
-                cities);
-    }
-
-    return total_dist;
-}
-
 // Converts tour's distance into a fitness score, the higher the score the better it is
 double fitness(const Tour &tour, const Cities &cities) {
     double dist = tour_len(tour, cities);
@@ -404,14 +380,14 @@ double fitness(const Tour &tour, const Cities &cities) {
 
 // TODO: comment here
 std::size_t tourney_select(const Tours &pop, const Cities &cities,
-    const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int K) {
+    const std::vector<double> &fitness_scores, std::mt19937_64 &rng, const int NUM_CANDS) {
     assert(!pop.empty());
 
     std::uniform_int_distribution<std::size_t> distrib(0, pop.size() - 1);
     std::size_t best_cand_idx = distrib(rng);
     double best_score = fitness_scores[best_cand_idx];
 
-    for (int i = 0; i < K - 1; i++) {
+    for (int i = 0; i < NUM_CANDS - 1; i++) {
         const std::size_t cand_idx = distrib(rng);
         const double cand_score = fitness_scores[cand_idx];
 

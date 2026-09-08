@@ -4,3 +4,4 @@
 #include <vector>
 
 using Tour = std::vector<std::size_t>;
+using Tours = std::vector<Tour>;
