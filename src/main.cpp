@@ -55,6 +55,9 @@ void run_ipc_server() {
     acceptor.accept(socket);
     std::println("Connected!");
 
+    // Disable Nagle's algorithm so tours are sent immediately instead of being buffered
+    socket.set_option(tcp::no_delay(true));
+
     // Build & send once the cities array to LÖVE2D
     Cities cities = load_cities();
     asio::write(socket, asio::buffer(cities_to_json(cities)));
