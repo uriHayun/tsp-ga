@@ -36,19 +36,20 @@ int main() {
 void run_ipc_server() {
     using namespace Tsp;
     using namespace Tsp::Ga;
+    using tcp = asio::ip::tcp;
 
     asio::io_context io;
 
     // Requests dynamic private port number from the OS
     constexpr unsigned short PORT_NUM = 0;
 
-    asio::ip::tcp::acceptor acceptor(io,
-        asio::ip::tcp::endpoint(asio::ip::tcp::v6(), PORT_NUM));
+    tcp::acceptor acceptor(io,
+        tcp::endpoint(tcp::v6(), PORT_NUM));
 
     // Allow IPv4 connections as well as IPv6
     acceptor.set_option(asio::ip::v6_only(false));
 
-    asio::ip::tcp::socket socket(io);
+    tcp::socket socket(io);
 
     // Block execution until LÖVE2D connects
     acceptor.accept(socket);
@@ -71,10 +72,11 @@ void run_ipc_server() {
         double curr_tour_len = tour_len(curr_tour, cities);
 
         if (curr_tour_len < last_tour_len) {
-            // Send the chosen tour to LÖVE2D to draw each generation
-            asio::write(socket, asio::buffer(tour_to_json(curr_tour)));
             last_tour_len = curr_tour_len;
         }
+
+        // Send the chosen tour to LÖVE2D to draw each generation
+        asio::write(socket, asio::buffer(tour_to_json(curr_tour)));
     }
 }
 
@@ -424,7 +426,7 @@ std::tuple<Tours, std::vector<double>, std::mt19937_64> init_ga(const Cities &ci
 }
 
 // the GA's main procedure:
-// TODO: explain GA's main procedure: start -> initialization -> crossover -> (bc of EAX there's no mutation) 
+// TODO: explain GA's procedure: start -> initialization -> crossover -> (bc of EAX there's no mutation) 
 // -> fitness (evaluation) -> selection -> end-condition (temporary) -> end
 Tour run_gen(Tours &pop, std::vector<double> &fitness_scores, std::mt19937_64 &rng, const Cities &cities) {
     using Eax::init_crossover;
